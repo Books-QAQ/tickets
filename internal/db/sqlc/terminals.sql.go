@@ -1,0 +1,100 @@
+package db
+
+import "context"
+
+const createTerminal = `-- name: CreateTerminal :one
+INSERT INTO terminals (city_id, name)
+VALUES (?, ?)
+`
+
+type CreateTerminalParams struct {
+	CityID int32  `json:"city_id"`
+	Name   string `json:"name"`
+}
+
+func (q *Queries) CreateTerminal(ctx context.Context, arg CreateTerminalParams) (Terminal, error) {
+	result, err := q.db.ExecContext(ctx, createTerminal, arg.CityID, arg.Name)
+	if err != nil {
+		return Terminal{}, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Terminal{}, err
+	}
+
+	return q.GetTerminalByID(ctx, int32(id))
+}
+
+const getTerminalByID = `-- name: GetTerminalByID :one
+SELECT id, city_id, name
+FROM terminals
+WHERE id = ?
+`
+
+func (q *Queries) GetTerminalByID(ctx context.Context, id int32) (Terminal, error) {
+	row := q.db.QueryRowContext(ctx, getTerminalByID, id)
+	var i Terminal
+	err := row.Scan(&i.ID, &i.CityID, &i.Name)
+	return i, err
+}
+
+const getTerminalsByCity = `-- name: GetTerminalsByCity :many
+SELECT id, city_id, name
+FROM terminals
+WHERE city_id = ?
+`
+
+func (q *Queries) GetTerminalsByCity(ctx context.Context, cityID int32) ([]Terminal, error) {
+	rows, err := q.db.QueryContext(ctx, getTerminalsByCity, cityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []Terminal{}
+	for rows.Next() {
+		var i Terminal
+		if err := rows.Scan(&i.ID, &i.CityID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTerminals = `-- name: ListTerminals :many
+SELECT id, name, city_id
+FROM terminals
+ORDER BY name
+`
+
+type ListTerminalsRow struct {
+	ID     int32  `json:"id"`
+	Name   string `json:"name"`
+	CityID int32  `json:"city_id"`
+}
+
+func (q *Queries) ListTerminals(ctx context.Context) ([]ListTerminalsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTerminals)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListTerminalsRow{}
+	for rows.Next() {
+		var i ListTerminalsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.CityID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

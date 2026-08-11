@@ -1,0 +1,9 @@
+//test
+go test -v .\tests\concurrency_test.go
+go test -v .\tests\oversell_test.go      
+go test -v .\tests\authMiddleware_test.go -count=1 
+
+
+
+ //插入测试用户到数据库
+ .\scripts\bulk_register_users.ps1 -CsvPath .\scripts\users.example.csv

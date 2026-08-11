@@ -1,0 +1,4 @@
+ALTER TABLE sessions
+  MODIFY COLUMN refresh_token TEXT NOT NULL,
+  MODIFY COLUMN user_agent TEXT NOT NULL,
+  MODIFY COLUMN client_ip TEXT NOT NULL;

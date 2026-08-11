@@ -1,0 +1,196 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"time"
+)
+
+const createRoute = `-- name: CreateRoute :one
+INSERT INTO routes (origin_terminal_id, destination_terminal_id, duration, distance)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateRouteParams struct {
+	OriginTerminalID      int32 `json:"origin_terminal_id"`
+	DestinationTerminalID int32 `json:"destination_terminal_id"`
+	Duration              int32 `json:"duration"`
+	Distance              int32 `json:"distance"`
+}
+
+func (q *Queries) CreateRoute(ctx context.Context, arg CreateRouteParams) (Route, error) {
+	result, err := q.db.ExecContext(ctx, createRoute,
+		arg.OriginTerminalID,
+		arg.DestinationTerminalID,
+		arg.Duration,
+		arg.Distance,
+	)
+	if err != nil {
+		return Route{}, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Route{}, err
+	}
+
+	return q.GetRouteByID(ctx, int32(id))
+}
+
+const getAllRoutes = `-- name: GetAllRoutes :many
+SELECT id, origin_terminal_id, destination_terminal_id, duration, distance
+FROM routes
+`
+
+func (q *Queries) GetAllRoutes(ctx context.Context) ([]Route, error) {
+	rows, err := q.db.QueryContext(ctx, getAllRoutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []Route{}
+	for rows.Next() {
+		var i Route
+		if err := rows.Scan(
+			&i.ID,
+			&i.OriginTerminalID,
+			&i.DestinationTerminalID,
+			&i.Duration,
+			&i.Distance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRouteByID = `-- name: GetRouteByID :one
+SELECT id, origin_terminal_id, destination_terminal_id, duration, distance
+FROM routes
+WHERE id = ?
+`
+
+func (q *Queries) GetRouteByID(ctx context.Context, id int32) (Route, error) {
+	row := q.db.QueryRowContext(ctx, getRouteByID, id)
+	var i Route
+	err := row.Scan(
+		&i.ID,
+		&i.OriginTerminalID,
+		&i.DestinationTerminalID,
+		&i.Duration,
+		&i.Distance,
+	)
+	return i, err
+}
+
+const listRoutes = `-- name: ListRoutes :many
+SELECT
+    r.id AS route_id,
+    r.origin_terminal_id,
+    r.destination_terminal_id,
+    t1.name AS origin_terminal_name,
+    t2.name AS destination_terminal_name,
+    b.id AS bus_id,
+    b.departure_time,
+    b.arrival_time,
+    b.capacity,
+    b.price,
+    b.bus_type,
+    b.corporation,
+    b.super_corporation,
+    b.service_number,
+    b.is_vip,
+    SUM(CASE WHEN bs.status = 'available' THEN 1 ELSE 0 END) AS available_seats
+FROM routes r
+JOIN terminals t1 ON r.origin_terminal_id = t1.id
+JOIN terminals t2 ON r.destination_terminal_id = t2.id
+JOIN buses b ON b.route_id = r.id
+LEFT JOIN bus_seats bs ON bs.bus_id = b.id
+WHERE r.origin_terminal_id = ?
+  AND r.destination_terminal_id = ?
+  AND DATE(b.departure_time) = DATE(?)
+GROUP BY
+    r.id,
+    r.origin_terminal_id,
+    r.destination_terminal_id,
+    t1.name,
+    t2.name,
+    b.id,
+    b.departure_time,
+    b.arrival_time,
+    b.capacity,
+    b.price,
+    b.bus_type,
+    b.corporation,
+    b.super_corporation,
+    b.service_number,
+    b.is_vip
+`
+
+type ListRoutesParams struct {
+	OriginTerminalID      int32     `json:"origin_terminal_id"`
+	DestinationTerminalID int32     `json:"destination_terminal_id"`
+	DepartureTime         time.Time `json:"departure_time"`
+}
+
+type ListRoutesRow struct {
+	RouteID                 int32          `json:"route_id"`
+	OriginTerminalID        int32          `json:"origin_terminal_id"`
+	DestinationTerminalID   int32          `json:"destination_terminal_id"`
+	OriginTerminalName      string         `json:"origin_terminal_name"`
+	DestinationTerminalName string         `json:"destination_terminal_name"`
+	BusID                   int32          `json:"bus_id"`
+	DepartureTime           time.Time      `json:"departure_time"`
+	ArrivalTime             time.Time      `json:"arrival_time"`
+	Capacity                int32          `json:"capacity"`
+	Price                   int32          `json:"price"`
+	BusType                 string         `json:"bus_type"`
+	Corporation             sql.NullString `json:"corporation"`
+	SuperCorporation        sql.NullString `json:"super_corporation"`
+	ServiceNumber           sql.NullString `json:"service_number"`
+	IsVip                   bool           `json:"is_vip"`
+	AvailableSeats          int64          `json:"available_seats"`
+}
+
+func (q *Queries) ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRoutes, arg.OriginTerminalID, arg.DestinationTerminalID, arg.DepartureTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListRoutesRow{}
+	for rows.Next() {
+		var i ListRoutesRow
+		if err := rows.Scan(
+			&i.RouteID,
+			&i.OriginTerminalID,
+			&i.DestinationTerminalID,
+			&i.OriginTerminalName,
+			&i.DestinationTerminalName,
+			&i.BusID,
+			&i.DepartureTime,
+			&i.ArrivalTime,
+			&i.Capacity,
+			&i.Price,
+			&i.BusType,
+			&i.Corporation,
+			&i.SuperCorporation,
+			&i.ServiceNumber,
+			&i.IsVip,
+			&i.AvailableSeats,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

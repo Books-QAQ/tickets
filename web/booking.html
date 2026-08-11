@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>票务系统 | 购票</title>
+  <link rel="stylesheet" href="/assets/css/base.css?v=20260618-1">
+  <link rel="stylesheet" href="/assets/css/booking.css?v=20260618-1">
+  <script src="/assets/js/booking.js?v=20260618-1" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">TM</span>
+        <span>智慧客运票务系统</span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="/">首页</a>
+        <a class="is-primary" href="/booking">购票</a>
+        <a href="/profile">个人中心</a>
+        <a href="/login">登录</a>
+        <a href="/register">注册</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <h1>查询班次、选择座位并完成购票</h1>
+      <div class="hero-actions">
+        <button class="btn-ghost" id="refresh-button" type="button">刷新账户信息</button>
+        <button class="btn-danger" id="logout-button" type="button">退出登录</button>
+      </div>
+      <div class="status" id="app-status">购票页已就绪，正在恢复登录状态。</div>
+    </section>
+
+    <section class="layout">
+      <article class="card span-12">
+        <h2>查询条件</h2>
+        <p class="lead">选择出发站、到达站和出发日期后，系统会返回可查询到的班次。</p>
+        <form class="search-form" id="search-form">
+          <div class="row">
+            <label>
+              出发车站
+              <select id="origin-terminal" required></select>
+            </label>
+            <label>
+              到达车站
+              <select id="destination-terminal" required></select>
+            </label>
+          </div>
+          <label>
+            出发日期
+            <input id="departure-date" type="date" required>
+          </label>
+          <button class="btn-accent" type="submit">查询可售班次</button>
+        </form>
+      </article>
+
+      <article class="card card-fixed span-6">
+        <h2>匹配班次</h2>
+        <div class="card-scroll">
+          <div class="routes" id="routes-list">
+            <div class="empty">请先选择查询条件。</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card card-fixed span-6">
+        <h2>座位选择</h2>
+        <div class="card-scroll">
+          <div class="seats" id="seats-list">
+            <div class="empty">尚未选择班次。</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-12">
+        <h2>我的票据</h2>
+        <div class="tickets" id="tickets-list">
+          <div class="empty">正在加载你的票据列表。</div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

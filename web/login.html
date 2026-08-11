@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>票务系统 | 登录</title>
+  <style>
+    :root {
+      --page-bg: #f6efe3;
+      --surface: rgba(255, 250, 242, 0.88);
+      --text: #1d2733;
+      --muted: #617180;
+      --line: rgba(29, 39, 51, 0.12);
+      --primary: #0c7c73;
+      --primary-deep: #085952;
+      --danger: #b7463e;
+      --success: #2d7a47;
+      --shadow: 0 20px 48px rgba(33, 40, 49, 0.12);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 16px;
+      --nav-height: 78px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(217, 111, 50, 0.18), transparent 26%),
+        radial-gradient(circle at top right, rgba(12, 124, 115, 0.18), transparent 22%),
+        linear-gradient(180deg, #fbf6ef 0%, #f2e7d5 52%, #f6efe3 100%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    input, button { font: inherit; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      width: 100%;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.46);
+      background: rgba(16, 32, 39, 0.84);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 10px 30px rgba(20, 32, 39, 0.14);
+    }
+
+    .topbar-inner {
+      width: min(1200px, calc(100% - 28px));
+      min-height: var(--nav-height);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #f9f5ee;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #f9f5ee;
+      background: linear-gradient(135deg, #0c7c73, #d96f32);
+    }
+
+    .nav-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      padding: 11px 16px;
+      border-radius: 999px;
+      color: rgba(249, 245, 238, 0.92);
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+
+    .nav-links a.is-primary {
+      color: white;
+      background: linear-gradient(135deg, #0c7c73, #0a635c);
+    }
+
+    .shell {
+      width: min(100%, 1200px);
+      margin: 0 auto;
+      min-height: calc(100vh - var(--nav-height));
+      display: grid;
+      place-items: center;
+      padding: 32px 18px 48px;
+    }
+
+    .card {
+      width: min(460px, 100%);
+      padding: 32px;
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      color: var(--primary-deep);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(12, 124, 115, 0.1);
+    }
+
+    h1 {
+      margin: 18px 0 0;
+      font-family: "STZhongsong", "Microsoft YaHei", serif;
+      font-size: clamp(2rem, 4vw, 3rem);
+      letter-spacing: -0.03em;
+      line-height: 1.08;
+    }
+
+    p {
+      margin: 14px 0 0;
+      color: var(--muted);
+      line-height: 1.72;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 0.94rem;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: rgba(12, 124, 115, 0.42);
+      box-shadow: 0 0 0 4px rgba(12, 124, 115, 0.08);
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      border-radius: 999px;
+      padding: 13px 20px;
+      font-weight: 800;
+      color: white;
+      background: linear-gradient(135deg, #0c7c73, #0a635c);
+    }
+
+    .switch-link {
+      margin-top: 16px;
+      color: var(--muted);
+      line-height: 1.68;
+    }
+
+    .switch-link a {
+      color: var(--primary-deep);
+      font-weight: 700;
+    }
+
+    .status {
+      margin-top: 16px;
+      min-height: 64px;
+      padding: 16px 18px;
+      border-radius: var(--radius-lg);
+      border: 1px dashed rgba(29, 39, 51, 0.16);
+      background: rgba(255, 255, 255, 0.74);
+      color: var(--muted);
+      line-height: 1.68;
+      white-space: pre-wrap;
+    }
+
+    .status[data-tone="error"] {
+      color: var(--danger);
+      border-color: rgba(183, 70, 62, 0.28);
+      background: rgba(183, 70, 62, 0.08);
+    }
+
+    .status[data-tone="success"] {
+      color: var(--success);
+      border-color: rgba(45, 122, 71, 0.24);
+      background: rgba(45, 122, 71, 0.08);
+    }
+
+    @media (max-width: 760px) {
+      .topbar-inner {
+        width: min(100% - 18px, 1200px);
+        padding: 12px 0;
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .card {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">TM</span>
+        <span>智慧客运票务系统</span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="/">首页</a>
+        <a href="/booking">购票</a>
+        <a href="/profile">个人中心</a>
+        <a class="is-primary" href="/login">登录</a>
+        <a href="/register">注册</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="card">
+      <div class="eyebrow">登录</div>
+      <h1>账号登录</h1>
+      <p>输入用户名和密码后，将自动跳转到购票页面。</p>
+      <form id="login-form">
+        <label>
+          用户名
+          <input id="login-username" name="username" placeholder="请输入用户名" required>
+        </label>
+        <label>
+          密码
+          <input id="login-password" name="password" type="password" placeholder="请输入密码" required>
+        </label>
+        <button type="submit">登录并前往购票</button>
+      </form>
+      <div class="switch-link">还没有账号？<a href="/register">前往注册</a></div>
+      <div class="status" id="login-status">请输入账号信息后登录。</div>
+    </section>
+  </main>
+
+  <script>
+    const TOKEN_KEY = "ticket_master_access_token";
+    const form = document.getElementById("login-form");
+    const statusBox = document.getElementById("login-status");
+    const token = localStorage.getItem(TOKEN_KEY);
+
+    function setStatus(message, tone = "") {
+      statusBox.textContent = message;
+      statusBox.dataset.tone = tone;
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      });
+
+      const raw = await response.text();
+      let data = null;
+
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch (error) {
+          data = raw;
+        }
+      }
+
+      if (!response.ok) {
+        const message = typeof data === "object" && data && data.error ? data.error : `${response.status} ${response.statusText}`;
+        throw new Error(message);
+      }
+
+      return data;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(form);
+
+      try {
+        const data = await request("/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: formData.get("username"),
+            password: formData.get("password")
+          })
+        });
+
+        const response = data && data.response ? data.response : null;
+        if (!response || !response.access_token) {
+          throw new Error("服务端未返回访问令牌");
+        }
+
+        localStorage.setItem(TOKEN_KEY, response.access_token);
+        setStatus(`用户 ${response.user.username} 登录成功，正在跳转到购票页。`, "success");
+        setTimeout(() => {
+          window.location.assign("/booking");
+        }, 350);
+      } catch (error) {
+        setStatus(`登录失败：${error.message}`, "error");
+      }
+    });
+
+    if (token) {
+      setStatus("检测到当前浏览器已存在登录态，你可以直接重新登录，或前往购票页。", "success");
+    }
+  </script>
+</body>
+</html>
