@@ -1,4 +1,4 @@
-# Ticket Master 业务流程图
+# Tickets 业务流程图
 
 下面按核心业务拆分流程图，使用 `Mermaid` 语法表示，适合直接放进 Markdown、Typora、Obsidian、GitHub 或 Mermaid Live Editor。
 

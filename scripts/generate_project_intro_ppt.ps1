@@ -1,5 +1,5 @@
 param(
-    [string]$OutputPath = ".\ticket-master-project-intro-3slides.pptx"
+    [string]$OutputPath = ".\tickets-project-intro-3slides.pptx"
 )
 
 Set-StrictMode -Version Latest
@@ -133,8 +133,8 @@ function New-SlideXml {
 }
 
 $fullOutputPath = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $OutputPath))
-$stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ticket-master-ppt-" + [guid]::NewGuid().ToString("N"))
-$zipPath = Join-Path ([System.IO.Path]::GetTempPath()) ("ticket-master-ppt-" + [guid]::NewGuid().ToString("N") + ".zip")
+$stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("tickets-ppt-" + [guid]::NewGuid().ToString("N"))
+$zipPath = Join-Path ([System.IO.Path]::GetTempPath()) ("tickets-ppt-" + [guid]::NewGuid().ToString("N") + ".zip")
 
 New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stagingRoot "_rels") -Force | Out-Null
@@ -147,7 +147,7 @@ New-Item -ItemType Directory -Path (Join-Path $stagingRoot "ppt\theme") -Force |
 
 $created = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-$slide1 = New-SlideXml -Title 'Ticket Master Overview' -Lines @(
+$slide1 = New-SlideXml -Title 'Tickets Overview' -Lines @(
     'Positioning: a backend ticketing project for passenger transport scenarios.'
     'Business: supports signup, login, route search, trip search, seat selection, purchase and refund.'
     'Tech stack: Go, Fiber, MySQL, Redis, sqlc and Docker Compose.'
@@ -218,7 +218,7 @@ $appXml = @"
   </HeadingPairs>
   <TitlesOfParts>
     <vt:vector size="3" baseType="lpstr">
-      <vt:lpstr>Ticket Master 项目概览</vt:lpstr>
+      <vt:lpstr>Tickets 项目概览</vt:lpstr>
       <vt:lpstr>系统设计与核心实现</vt:lpstr>
       <vt:lpstr>测试验证与项目亮点</vt:lpstr>
     </vt:vector>
@@ -234,11 +234,11 @@ $appXml = @"
 $coreXml = @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Ticket Master 项目介绍</dc:title>
+  <dc:title>Tickets 项目介绍</dc:title>
   <dc:subject>Project Introduction</dc:subject>
   <dc:creator>OpenAI Codex</dc:creator>
   <cp:keywords>Go,Fiber,MySQL,Redis,Ticketing</cp:keywords>
-  <dc:description>Three-slide project introduction for Ticket Master.</dc:description>
+  <dc:description>Three-slide project introduction for Tickets.</dc:description>
   <cp:lastModifiedBy>OpenAI Codex</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">$created</dcterms:created>
   <dcterms:modified xsi:type="dcterms:W3CDTF">$created</dcterms:modified>

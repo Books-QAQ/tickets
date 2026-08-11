@@ -26,7 +26,7 @@
 ## 项目结构
 
 ```text
-ticket-master/
+tickets/
 ├── internal/                # 核心业务代码
 │   ├── api/                 # HTTP 接口处理
 │   ├── cache/               # Redis 缓存与队列能力
@@ -50,8 +50,8 @@ ticket-master/
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/mousav1/ticket.git
-cd ticket
+git clone https://github.com/Books-QAQ/tickets.git
+cd tickets
 ```
 
 ### 2. 配置环境变量
