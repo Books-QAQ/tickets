@@ -1,6 +1,6 @@
 module github.com/Books-QAQ/tickets
 
-go 1.23.0
+go 1.22.0
 
 require (
 	github.com/go-playground/validator/v10 v10.22.0
