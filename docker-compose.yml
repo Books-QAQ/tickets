@@ -17,9 +17,11 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
       - mysql
       - redis
+      - rabbitmq
     restart: always
     command: [ "/app/main" ]
   mysql:
@@ -37,6 +39,14 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
 volumes:
   mysql_data:
   redis_data:

@@ -306,7 +306,8 @@ func (h *TicketHandler) PurchaseTicketAsync(c *fiber.Ctx) error {
 		SeatID:    req.SeatID,
 	}
 
-	if err := cache.EnqueueJSON(c.Context(), h.redis, cache.PurchaseQueueKey, message); err != nil {
+	shard := worker.PurchaseShard(req.SeatID, h.config.PurchaseWorkerCount)
+	if err := cache.EnqueueJSON(c.Context(), h.redis, cache.PurchaseQueueKeyForShard(shard), message); err != nil {
 		_ = cache.ReleaseSeatHold(c.Context(), h.redis, req.BusID, req.SeatID, owner)
 		_ = cache.DeleteKey(c.Context(), h.redis, taskKey)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to enqueue purchase task"})

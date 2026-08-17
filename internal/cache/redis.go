@@ -11,9 +11,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const (
-	PurchaseQueueKey = "queue:purchase"
-)
+// PurchaseQueueKeyForShard 返回第 shard 个分片的购票队列 key。
+// 按座位取模分片，保证同一座位的购票消息进入同一队列、被同一 worker 串行消费。
+func PurchaseQueueKeyForShard(shard int) string {
+	return fmt.Sprintf("queue:purchase:%d", shard)
+}
 
 func NewRedisClient(config util.Config) (*redis.Client, error) {
 	addr := fmt.Sprintf("%s:%s", config.REDISHOST, config.REDISPORT)

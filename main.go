@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang-migrate/migrate/v4"
@@ -15,6 +16,7 @@ import (
 	"github.com/Books-QAQ/tickets/internal/bootstrap"
 	"github.com/Books-QAQ/tickets/internal/cache"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/routes"
 	"github.com/Books-QAQ/tickets/internal/util"
 	"github.com/Books-QAQ/tickets/internal/worker"
@@ -70,10 +72,30 @@ func main() {
 	}
 	defer redisClient.Close()
 
+	// 连接 RabbitMQ（DLX+TTL 延迟队列），失败则降级为 nil，靠兜底扫描关单
+	var mq *queue.RabbitMQ
+	if config.RabbitMQURL != "" {
+		mq, err = queue.NewRabbitMQ(config.RabbitMQURL)
+		if err != nil {
+			log.Error().Err(err).Msg("cannot connect to rabbitmq, fallback to periodic scan")
+			mq = nil
+		} else {
+			defer mq.Close()
+			expireTTL := config.OrderExpireDuration
+			if expireTTL <= 0 {
+				expireTTL = 15 * time.Minute
+			}
+			if err := mq.SetupOrderExpiry(expireTTL); err != nil {
+				log.Error().Err(err).Msg("cannot setup order expiry queue, fallback to periodic scan")
+			}
+		}
+	}
+
 	server, err := api.NewServer(config, store, redisClient)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot create server")
 	}
+	server.MQ = mq
 
 	appCtx := context.Background()
 
@@ -83,6 +105,10 @@ func main() {
 
 	bootstrap.StartDemoDataScheduler(appCtx, dbConn)
 	worker.StartPurchaseWorker(appCtx, store, redisClient, config)
+	if mq != nil {
+		worker.StartOrderExpiryConsumer(appCtx, store, mq)
+	}
+	worker.StartOrderExpiryFallbackScanner(appCtx, store, config)
 
 	if err := routes.SetupRoutes(server); err != nil {
 		log.Fatal().Err(err).Msg("failed to set up routes")

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/token"
 	"github.com/Books-QAQ/tickets/internal/util"
 	"github.com/redis/go-redis/v9"
@@ -15,6 +16,7 @@ type Server struct {
 	Store      *db.Store
 	Redis      *redis.Client
 	TokenMaker token.Maker
+	MQ         *queue.RabbitMQ
 	App        *fiber.App
 }
 

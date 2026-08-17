@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -91,11 +92,28 @@ func (h *RouteHandler) SearchRoutes(c *fiber.Ctx) error {
 
 	response := make([]routeResponse, 0, len(routes))
 	nowInBeijing := time.Now().In(beijingLocation)
-	for _, route := range routes {
-		saleOpenAt, err := h.store.GetBusSaleOpenAt(c.Context(), route.BusID)
-		if err != nil {
+
+	// 并发查询每个班次的售票窗口，消除 N+1 串行查询
+	type saleWindow struct {
+		saleOpenAt time.Time
+		err        error
+	}
+	windows := make([]saleWindow, len(routes))
+	var wg sync.WaitGroup
+	for i := range routes {
+		wg.Add(1)
+		go func(idx int, busID int32) {
+			defer wg.Done()
+			windows[idx].saleOpenAt, windows[idx].err = h.store.GetBusSaleOpenAt(c.Context(), busID)
+		}(i, routes[i].BusID)
+	}
+	wg.Wait()
+
+	for i, route := range routes {
+		if windows[i].err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch route sale window"})
 		}
+		saleOpenAt := windows[i].saleOpenAt
 
 		response = append(response, routeResponse{
 			RouteID:         route.RouteID,

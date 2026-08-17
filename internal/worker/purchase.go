@@ -36,23 +36,55 @@ func SeatHoldOwner(userID int32, requestID string) string {
 	return fmt.Sprintf("%d:%s", userID, requestID)
 }
 
-func StartPurchaseWorker(ctx context.Context, store *db.Store, redisClient *redis.Client, config util.Config) {
-	go func() {
-		for {
-			var message PurchaseRequestMessage
-			found, err := cache.DequeueJSONBlocking(ctx, redisClient, cache.PurchaseQueueKey, 5*time.Second, &message)
-			if err != nil {
-				log.Error().Err(err).Msg("purchase worker failed to dequeue message")
-				time.Sleep(time.Second)
-				continue
-			}
-			if !found {
-				continue
-			}
+// PurchaseShard 根据座位号和工作线程数计算分片号，保证同一座位总是落到同一分片。
+func PurchaseShard(seatID int32, workerCount int) int {
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+	return int(seatID) % workerCount
+}
 
-			processPurchaseMessage(ctx, store, redisClient, config, message)
+func purchaseWorkerCount(config util.Config) int {
+	if config.PurchaseWorkerCount <= 0 {
+		return 1
+	}
+	return config.PurchaseWorkerCount
+}
+
+// StartPurchaseWorker 启动 N 个分片消费协程。每个协程只消费自己的分片队列，
+// 保证同一座位的消息被串行处理，不同座位的消息可以并行处理。
+func StartPurchaseWorker(ctx context.Context, store *db.Store, redisClient *redis.Client, config util.Config) {
+	n := purchaseWorkerCount(config)
+	for shard := 0; shard < n; shard++ {
+		go runPurchaseWorker(ctx, store, redisClient, config, shard)
+	}
+}
+
+func runPurchaseWorker(ctx context.Context, store *db.Store, redisClient *redis.Client, config util.Config, shard int) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Interface("panic", r).Int("shard", shard).Msg("purchase worker recovered from panic")
 		}
 	}()
+
+	queueKey := cache.PurchaseQueueKeyForShard(shard)
+	for {
+		var message PurchaseRequestMessage
+		found, err := cache.DequeueJSONBlocking(ctx, redisClient, queueKey, 5*time.Second, &message)
+		if err != nil {
+			if ctx.Err() != nil {
+				return // 收到退出信号，停止消费
+			}
+			log.Error().Err(err).Int("shard", shard).Msg("purchase worker failed to dequeue message")
+			time.Sleep(time.Second)
+			continue
+		}
+		if !found {
+			continue
+		}
+
+		processPurchaseMessage(ctx, store, redisClient, config, message)
+	}
 }
 
 func processPurchaseMessage(ctx context.Context, store *db.Store, redisClient *redis.Client, config util.Config, message PurchaseRequestMessage) {

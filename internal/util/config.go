@@ -29,6 +29,10 @@ type Config struct {
 	PurchaseRateLimitRefillRate float64       `mapstructure:"PURCHASE_RATE_LIMIT_REFILL_RATE"`
 	SeatHoldTTL                 time.Duration `mapstructure:"SEAT_HOLD_TTL"`
 	PurchaseTaskTTL             time.Duration `mapstructure:"PURCHASE_TASK_TTL"`
+	PurchaseWorkerCount         int           `mapstructure:"PURCHASE_WORKER_COUNT"`
+	OrderExpireDuration         time.Duration `mapstructure:"ORDER_EXPIRE_DURATION"`
+	OrderExpireInterval         time.Duration `mapstructure:"ORDER_EXPIRE_INTERVAL"`
+	RabbitMQURL                 string        `mapstructure:"RABBITMQ_URL"`
 	TOKENSECRETKEY              string        `mapstructure:"TOKEN_SECRET_KEY"`
 	AccessTokenDuration         time.Duration `mapstructure:"ACCESS_TOKEN_DURATION"`
 	RefreshTokenDuration        time.Duration `mapstructure:"REFRESH_TOKEN_DURATION"`
