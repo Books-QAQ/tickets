@@ -4,391 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>票务系统 | 个人中心</title>
-  <style>
-    :root {
-      --page-bg: #f6efe3;
-      --surface: rgba(255, 250, 242, 0.88);
-      --text: #1d2733;
-      --muted: #617180;
-      --line: rgba(29, 39, 51, 0.12);
-      --primary: #0c7c73;
-      --primary-deep: #085952;
-      --accent: #d96f32;
-      --danger: #b7463e;
-      --success: #2d7a47;
-      --shadow: 0 20px 48px rgba(33, 40, 49, 0.12);
-      --radius-xl: 28px;
-      --radius-lg: 20px;
-      --radius-md: 16px;
-      --nav-height: 78px;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--text);
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(217, 111, 50, 0.18), transparent 26%),
-        radial-gradient(circle at top right, rgba(12, 124, 115, 0.18), transparent 22%),
-        linear-gradient(180deg, #fbf6ef 0%, #f2e7d5 52%, #f6efe3 100%);
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    button {
-      font: inherit;
-    }
-
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      width: 100%;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.46);
-      background: rgba(16, 32, 39, 0.84);
-      backdrop-filter: blur(14px);
-      box-shadow: 0 10px 30px rgba(20, 32, 39, 0.14);
-    }
-
-    .topbar-inner {
-      width: min(1200px, calc(100% - 28px));
-      min-height: var(--nav-height);
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: #f9f5ee;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-    }
-
-    .brand-badge {
-      width: 42px;
-      height: 42px;
-      border-radius: 14px;
-      display: grid;
-      place-items: center;
-      color: #f9f5ee;
-      background: linear-gradient(135deg, #0c7c73, #d96f32);
-    }
-
-    .nav-links {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
-    .nav-links a {
-      padding: 11px 16px;
-      border-radius: 999px;
-      color: rgba(249, 245, 238, 0.92);
-      font-size: 0.96rem;
-      font-weight: 700;
-      transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
-    }
-
-    .nav-links a:hover,
-    .nav-links a:focus-visible {
-      color: white;
-      background: rgba(255, 255, 255, 0.12);
-      transform: translateY(-1px);
-    }
-
-    .nav-links a.is-primary {
-      color: white;
-      background: linear-gradient(135deg, #0c7c73, #0a635c);
-    }
-
-    .shell {
-      width: min(1200px, calc(100% - 28px));
-      margin: 0 auto;
-      padding: 28px 0 48px;
-    }
-
-    .hero,
-    .card {
-      border-radius: var(--radius-xl);
-      background: var(--surface);
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
-    }
-
-    .hero {
-      padding: 34px;
-      background:
-        linear-gradient(140deg, rgba(255, 251, 246, 0.95), rgba(255, 243, 226, 0.82)),
-        linear-gradient(135deg, rgba(12, 124, 115, 0.14), rgba(217, 111, 50, 0.1));
-    }
-
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 14px;
-      border-radius: 999px;
-      color: var(--primary-deep);
-      font-size: 0.82rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      background: rgba(12, 124, 115, 0.1);
-    }
-
-    h1,
-    h2,
-    h3 {
-      margin: 0;
-      font-family: "STZhongsong", "Microsoft YaHei", serif;
-      letter-spacing: -0.03em;
-    }
-
-    h1 {
-      margin-top: 18px;
-      max-width: 760px;
-      font-size: clamp(2.3rem, 4vw, 4.2rem);
-      line-height: 1;
-    }
-
-    .hero p,
-    .lead {
-      margin: 14px 0 0;
-      color: var(--muted);
-      line-height: 1.72;
-    }
-
-    .hero-actions,
-    .tab-bar,
-    .summary-grid,
-    .meta-list,
-    .ticket-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .hero-actions {
-      margin-top: 22px;
-    }
-
-    .hero-actions button,
-    .tab-button,
-    .ticket-actions button {
-      border: 0;
-      cursor: pointer;
-      border-radius: 999px;
-      padding: 13px 20px;
-      font-weight: 800;
-      transition: transform 0.18s ease, opacity 0.18s ease;
-    }
-
-    .hero-actions button:hover,
-    .tab-button:hover,
-    .ticket-actions button:hover {
-      transform: translateY(-1px);
-    }
-
-    .btn-primary {
-      color: white;
-      background: linear-gradient(135deg, #0c7c73, #0a635c);
-    }
-
-    .btn-ghost {
-      color: var(--primary-deep);
-      background: rgba(12, 124, 115, 0.1);
-    }
-
-    .btn-danger {
-      color: white;
-      background: linear-gradient(135deg, #b7463e, #923a35);
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: 18px;
-      margin-top: 22px;
-    }
-
-    .card {
-      grid-column: span 12;
-      padding: 24px;
-    }
-
-    .span-4 {
-      grid-column: span 4;
-    }
-
-    .span-8 {
-      grid-column: span 8;
-    }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-      margin-top: 18px;
-    }
-
-    .summary-item,
-    .ticket-card {
-      padding: 18px;
-      border-radius: var(--radius-lg);
-      background: rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(29, 39, 51, 0.08);
-    }
-
-    .summary-item strong {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 1.3rem;
-    }
-
-    .summary-item span,
-    .meta-list,
-    .status,
-    .empty,
-    .ticket-card p {
-      color: var(--muted);
-      line-height: 1.68;
-    }
-
-    .profile-box {
-      display: grid;
-      gap: 14px;
-    }
-
-    .profile-box strong {
-      font-size: 1.14rem;
-    }
-
-    .meta-list span {
-      display: inline-flex;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(12, 124, 115, 0.08);
-      color: var(--primary-deep);
-      font-size: 0.9rem;
-      font-weight: 700;
-    }
-
-    .status,
-    .empty {
-      padding: 16px 18px;
-      border-radius: var(--radius-lg);
-      border: 1px dashed rgba(29, 39, 51, 0.16);
-      background: rgba(255, 255, 255, 0.74);
-      white-space: pre-wrap;
-    }
-
-    .status[data-tone="error"] {
-      color: var(--danger);
-      border-color: rgba(183, 70, 62, 0.28);
-      background: rgba(183, 70, 62, 0.08);
-    }
-
-    .status[data-tone="success"] {
-      color: var(--success);
-      border-color: rgba(45, 122, 71, 0.24);
-      background: rgba(45, 122, 71, 0.08);
-    }
-
-    .tab-bar {
-      margin-top: 10px;
-      margin-bottom: 18px;
-    }
-
-    .tab-button {
-      color: var(--primary-deep);
-      background: rgba(12, 124, 115, 0.08);
-    }
-
-    .tab-button.is-active {
-      color: white;
-      background: linear-gradient(135deg, #0c7c73, #0a635c);
-      box-shadow: 0 12px 24px rgba(12, 124, 115, 0.22);
-    }
-
-    .ticket-list {
-      display: grid;
-      gap: 12px;
-    }
-
-    .ticket-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 14px;
-      margin-bottom: 10px;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(12, 124, 115, 0.1);
-      color: var(--primary-deep);
-      font-size: 0.86rem;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
-    @media (max-width: 980px) {
-      .span-4,
-      .span-8 {
-        grid-column: span 12;
-      }
-
-      .summary-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 760px) {
-      .topbar-inner,
-      .shell {
-        width: min(100% - 18px, 1200px);
-      }
-
-      .topbar-inner {
-        padding: 12px 0;
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      .nav-links {
-        justify-content: flex-start;
-      }
-
-      .hero,
-      .card {
-        padding: 22px;
-      }
-
-      .ticket-top {
-        flex-direction: column;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="/assets/css/base.css?v=20260818-4">
+  <link rel="stylesheet" href="/assets/css/profile.css?v=20260818-4">
 </head>
 <body>
   <header class="topbar">
@@ -397,33 +14,36 @@
         <span class="brand-badge">TM</span>
         <span>智慧客运票务系统</span>
       </a>
-      <nav class="nav-links" aria-label="主导航">
-        <a href="/">首页</a>
-        <a href="/booking">购票</a>
-        <a class="is-primary" href="/profile">个人中心</a>
-        <a href="/login">登录</a>
-        <a href="/register">注册</a>
-      </nav>
+      <div class="topbar-right">
+        <nav class="nav-links" aria-label="主导航">
+          <a href="/">首页</a>
+          <a href="/booking">购票</a>
+          <a class="is-primary" href="/profile">个人中心</a>
+        </nav>
+        <button class="btn-danger btn-sm" id="logout-button" type="button">退出登录</button>
+      </div>
     </div>
   </header>
 
   <main class="shell">
-    <section class="hero">
-      <div class="eyebrow">个人中心</div>
-      <h1>统一查看购票历史、待出行与待付款记录</h1>
-      <p>这个页面将用户信息和票据记录集中展示，并通过标签页方式区分不同状态的订单，便于你演示“分页面”的个人中心结构。</p>
-      <div class="hero-actions">
+    <section class="page-head">
+      <div class="page-head-copy">
+        <div class="eyebrow">个人中心</div>
+        <h1>我的账户与订单</h1>
+        <p class="lead">统一查看账户资料、购票历史，以及待出行、待付款的订单记录。</p>
+      </div>
+      <div class="page-head-actions">
         <button class="btn-ghost" id="refresh-button" type="button">刷新数据</button>
         <button class="btn-primary" id="go-booking-button" type="button">继续购票</button>
-        <button class="btn-danger" id="logout-button" type="button">退出登录</button>
       </div>
-      <div class="status" id="profile-status">正在加载个人资料与票据数据。</div>
     </section>
+
+    <div class="status" id="profile-status">正在加载个人资料与票据数据。</div>
 
     <section class="layout">
       <article class="card span-4">
         <h2>账户信息</h2>
-        <p class="lead">当前登录账号的基础资料会显示在这里。</p>
+        <p class="lead">当前登录账号的基础资料显示在这里。</p>
         <div class="profile-box" id="profile-box">
           <div class="empty">正在加载用户信息。</div>
         </div>
@@ -431,7 +51,7 @@
 
       <article class="card span-8">
         <h2>订单概览</h2>
-        <p class="lead">按标签切换不同类型的票据列表，模拟个人中心的分页面体验。</p>
+        <p class="lead">按标签切换购票历史、待出行与待付款订单，快速定位不同状态的票据。</p>
         <div class="summary-grid" id="summary-grid">
           <div class="summary-item">
             <strong>0</strong>
@@ -588,7 +208,6 @@
           <span>创建时间：${formatTime(state.user.created_at)}</span>
           <span>最近改密：${formatTime(state.user.password_changed_at)}</span>
         </div>
-        <div class="status">个人中心中的鉴权请求均使用当前登录后的 Bearer Token 发起，因此如果令牌失效，页面会自动回到登录入口。</div>
       `;
     }
 

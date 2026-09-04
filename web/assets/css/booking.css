@@ -1,13 +1,17 @@
+/* ==========================================================================
+   购票页 · 查询表单 / 班次 / 座位 / 票据（Stripe 适配）
+   ========================================================================== */
+
 .layout {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 18px;
-  margin-top: 22px;
+  margin-top: 20px;
 }
 
 .card {
   grid-column: span 12;
-  padding: 24px;
+  padding: 26px;
   display: grid;
   gap: 14px;
 }
@@ -24,6 +28,10 @@
   grid-column: span 5;
 }
 
+.span-6 {
+  grid-column: span 6;
+}
+
 .span-7 {
   grid-column: span 7;
 }
@@ -32,10 +40,7 @@
   grid-column: span 8;
 }
 
-.span-6 {
-  grid-column: span 6;
-}
-
+/* ============ 查询表单 ============ */
 .search-form,
 .routes,
 .tickets,
@@ -44,16 +49,32 @@
   gap: 12px;
 }
 
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ============ 固定高度卡片（滚动） ============ */
 .card-fixed {
   grid-template-rows: auto auto 1fr;
-  min-height: 640px;
-  max-height: 640px;
+  min-height: 480px;
+  max-height: 480px;
 }
 
 .card-fixed .card-scroll {
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
+  display: grid;
+  align-items: stretch;
+}
+
+/* 空态在固定卡片内垂直居中占满 */
+.card-fixed .card-scroll .empty {
+  min-height: 320px;
+  align-self: stretch;
+  place-content: center;
 }
 
 .card-fixed .card-scroll::-webkit-scrollbar {
@@ -61,54 +82,24 @@
 }
 
 .card-fixed .card-scroll::-webkit-scrollbar-track {
-  background: rgba(29, 39, 51, 0.08);
-  border-radius: 999px;
+  background: #f6f8fc;
+  border-radius: var(--radius-pill, 999px);
 }
 
 .card-fixed .card-scroll::-webkit-scrollbar-thumb {
-  background: rgba(12, 124, 115, 0.36);
-  border-radius: 999px;
+  background: #c8ccd8;
+  border-radius: var(--radius-pill, 999px);
 }
 
-.row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-label {
-  display: grid;
-  gap: 8px;
-  font-size: 0.94rem;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-input,
-select {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--text);
-  outline: none;
-}
-
-input:focus,
-select:focus {
-  border-color: rgba(12, 124, 115, 0.42);
-  box-shadow: 0 0 0 4px rgba(12, 124, 115, 0.08);
-}
-
+/* ============ 班次 / 票据卡片 ============ */
 .route-card,
 .ticket-card {
   display: grid;
   gap: 12px;
   padding: 18px;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(29, 39, 51, 0.08);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  border: 1px solid var(--border);
 }
 
 .route-top,
@@ -123,28 +114,29 @@ select:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  color: var(--muted);
-  font-size: 0.92rem;
+  color: var(--slate);
+  font-size: 0.88rem;
   line-height: 1.6;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(12, 124, 115, 0.1);
-  color: var(--primary-deep);
-  font-size: 0.86rem;
-  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(83, 58, 253, 0.08);
+  color: var(--purple);
+  font-size: 0.82rem;
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .pill.warn {
-  background: rgba(217, 111, 50, 0.12);
-  color: #9a4d1f;
+  background: rgba(234, 34, 97, 0.08);
+  color: var(--error);
 }
 
+/* ============ 座位 ============ */
 .seat-shell {
   display: grid;
   gap: 16px;
@@ -157,54 +149,56 @@ select:focus {
 }
 
 .seat-tile {
-  min-height: 74px;
-  border: 1px solid rgba(29, 39, 51, 0.14);
-  border-radius: 18px;
-  background: white;
+  min-height: 68px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
   display: grid;
   place-items: center;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
 
 .seat-tile:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(29, 39, 51, 0.1);
+  box-shadow: var(--shadow-soft);
+  border-color: var(--border-purple);
 }
 
 .seat-tile.unavailable {
-  color: white;
-  background: linear-gradient(135deg, #cf564e, #a93d36);
-  border-color: rgba(169, 61, 54, 0.56);
+  color: #c8ccd8;
+  background: #f6f8fc;
+  border-color: var(--border);
   cursor: not-allowed;
+  text-decoration: line-through;
 }
 
 .seat-tile.selected {
-  color: white;
-  background: linear-gradient(135deg, #0c7c73, #0a635c);
-  border-color: rgba(12, 124, 115, 0.56);
-  box-shadow: 0 12px 24px rgba(12, 124, 115, 0.22);
+  color: var(--white);
+  background: var(--purple);
+  border-color: var(--purple);
 }
 
 .seat-dot {
   width: 14px;
   height: 14px;
   border-radius: 4px;
-  border: 1px solid rgba(29, 39, 51, 0.14);
-  background: white;
+  border: 1px solid var(--border);
+  background: var(--white);
 }
 
 .seat-dot.selected {
-  background: #0c7c73;
-  border-color: rgba(12, 124, 115, 0.56);
+  background: var(--purple);
+  border-color: var(--purple);
 }
 
 .seat-dot.unavailable {
-  background: #b7463e;
-  border-color: rgba(183, 70, 62, 0.56);
+  background: #c8ccd8;
+  border-color: var(--border);
 }
 
+/* ============ 响应式 ============ */
 @media (max-width: 1024px) {
   .span-12,
   .span-4,
@@ -239,4 +233,210 @@ select:focus {
   .seat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ===== 支付方式对勾选项 ===== */
+.pay-methods {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+}
+
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--border, #d8dde6);
+  border-radius: 10px;
+  cursor: pointer;
+  background: #fff;
+  transition: border-color .15s ease, background .15s ease;
+  user-select: none;
+}
+
+.pay-method:hover {
+  border-color: var(--accent, #1677ff);
+}
+
+.pay-method input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.pay-method-check {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #c2c9d4;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.pay-method input[type="radio"]:checked + .pay-method-check {
+  border-color: var(--accent, #1677ff);
+  background: var(--accent, #1677ff);
+}
+
+.pay-method input[type="radio"]:checked + .pay-method-check::after {
+  content: "";
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.pay-method input[type="radio"]:checked ~ .pay-method-label {
+  font-weight: 600;
+  color: var(--accent, #1677ff);
+}
+
+.pay-method:has(input[type="radio"]:checked) {
+  border-color: var(--accent, #1677ff);
+  background: rgba(22, 119, 255, 0.05);
+}
+
+/* ===== 支付二维码悬浮弹窗 ===== */
+.pay-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.pay-modal.is-open {
+  display: flex;
+}
+
+.pay-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.pay-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(360px, calc(100vw - 40px));
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: pay-modal-in .2s ease;
+}
+
+@keyframes pay-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pay-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.pay-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a2233;
+}
+
+.pay-modal-close {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background .15s ease, color .15s ease;
+}
+
+.pay-modal-close:hover {
+  background: #f1f3f7;
+  color: #1a2233;
+}
+
+.pay-modal-body {
+  padding: 24px 20px 28px;
+  text-align: center;
+}
+
+.pay-modal-qr {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.pay-modal-qr img {
+  display: block;
+  border: 1px solid #eef1f5;
+  border-radius: 12px;
+}
+
+.pay-modal-tip {
+  font-size: 14px;
+  color: #4b5563;
+  margin-bottom: 6px;
+}
+
+.pay-modal-order {
+  font-size: 12px;
+  color: #9aa3af;
+  word-break: break-all;
+}
+
+/* ===== 支付弹窗倒计时 + 刷新按钮 ===== */
+.pay-modal-countdown {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #f59e0b;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-modal-countdown[data-tone="danger"] {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.pay-modal-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  padding: 8px 18px;
+  border: 1.5px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.pay-modal-refresh:hover {
+  border-color: var(--accent, #1677ff);
+  color: var(--accent, #1677ff);
+  background: rgba(22, 119, 255, 0.05);
 }

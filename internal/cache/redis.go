@@ -4,18 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/Books-QAQ/tickets/internal/util"
 	"github.com/redis/go-redis/v9"
 )
-
-// PurchaseQueueKeyForShard 返回第 shard 个分片的购票队列 key。
-// 按座位取模分片，保证同一座位的购票消息进入同一队列、被同一 worker 串行消费。
-func PurchaseQueueKeyForShard(shard int) string {
-	return fmt.Sprintf("queue:purchase:%d", shard)
-}
 
 func NewRedisClient(config util.Config) (*redis.Client, error) {
 	addr := fmt.Sprintf("%s:%s", config.REDISHOST, config.REDISPORT)
@@ -87,10 +80,6 @@ func SeatHoldKey(busID, seatID int32) string {
 	return fmt.Sprintf("seat:hold:%d:%d", busID, seatID)
 }
 
-func PurchaseTaskKey(requestID string) string {
-	return fmt.Sprintf("purchase:task:%s", requestID)
-}
-
 func RoutesQueryCacheKey(originTerminalID, destinationTerminalID int32, departureDate time.Time) string {
 	return fmt.Sprintf(
 		"routes:%d:%d:%s",
@@ -127,59 +116,6 @@ func ReleaseSeatHold(ctx context.Context, client *redis.Client, busID, seatID in
 	return releaseSeatHoldScript.Run(ctx, client, []string{SeatHoldKey(busID, seatID)}, owner).Err()
 }
 
-func GetSeatHoldOwner(ctx context.Context, client *redis.Client, busID, seatID int32) (string, error) {
-	if client == nil {
-		return "", nil
-	}
-
-	value, err := client.Get(ctx, SeatHoldKey(busID, seatID)).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return "", nil
-		}
-		return "", err
-	}
-
-	return value, nil
-}
-
-func EnqueueJSON(ctx context.Context, client *redis.Client, queueKey string, value any) error {
-	if client == nil {
-		return nil
-	}
-
-	payload, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-
-	return client.RPush(ctx, queueKey, payload).Err()
-}
-
-func DequeueJSONBlocking(ctx context.Context, client *redis.Client, queueKey string, timeout time.Duration, target any) (bool, error) {
-	if client == nil {
-		return false, nil
-	}
-
-	values, err := client.BLPop(ctx, timeout, queueKey).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if len(values) < 2 {
-		return false, nil
-	}
-
-	if err := json.Unmarshal([]byte(values[1]), target); err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
 func AllowFixedWindow(ctx context.Context, client *redis.Client, key string, limit int64, window time.Duration) (bool, time.Duration, error) {
 	if client == nil || limit <= 0 || window <= 0 {
 		return true, 0, nil
@@ -205,88 +141,4 @@ func AllowFixedWindow(ctx context.Context, client *redis.Client, key string, lim
 	}
 
 	return count <= limit, ttl, nil
-}
-
-var tokenBucketScript = redis.NewScript(`
-local key = KEYS[1]
-local now = tonumber(ARGV[1])
-local capacity = tonumber(ARGV[2])
-local refill_rate = tonumber(ARGV[3])
-local requested = tonumber(ARGV[4])
-local ttl = tonumber(ARGV[5])
-
-local data = redis.call("HMGET", key, "tokens", "ts")
-local tokens = tonumber(data[1])
-local ts = tonumber(data[2])
-
-if tokens == nil then
-  tokens = capacity
-end
-
-if ts == nil then
-  ts = now
-end
-
-local delta = now - ts
-if delta < 0 then
-  delta = 0
-end
-
-local replenished = tokens + (delta / 1000.0) * refill_rate
-if replenished > capacity then
-  replenished = capacity
-end
-
-local allowed = 0
-local remaining = replenished
-local retry_after_ms = 0
-
-if replenished >= requested then
-  allowed = 1
-  remaining = replenished - requested
-else
-  retry_after_ms = math.ceil(((requested - replenished) / refill_rate) * 1000)
-  if retry_after_ms < 0 then
-    retry_after_ms = 0
-  end
-end
-
-redis.call("HMSET", key, "tokens", remaining, "ts", now)
-redis.call("PEXPIRE", key, ttl)
-
-return {allowed, remaining, retry_after_ms}
-`)
-
-func AllowTokenBucket(ctx context.Context, client *redis.Client, key string, capacity int64, refillRate float64, requested int64) (bool, time.Duration, error) {
-	if client == nil || capacity <= 0 || refillRate <= 0 || requested <= 0 {
-		return true, 0, nil
-	}
-
-	nowMs := time.Now().UnixMilli()
-	ttlMs := int64(math.Ceil((float64(capacity) / refillRate) * 2000.0))
-	if ttlMs < 1000 {
-		ttlMs = 1000
-	}
-
-	values, err := tokenBucketScript.Run(ctx, client, []string{key}, nowMs, capacity, refillRate, requested, ttlMs).Result()
-	if err != nil {
-		return true, 0, err
-	}
-
-	result, ok := values.([]interface{})
-	if !ok || len(result) != 3 {
-		return true, 0, fmt.Errorf("unexpected token bucket result")
-	}
-
-	allowed, ok := result[0].(int64)
-	if !ok {
-		return true, 0, fmt.Errorf("unexpected token bucket allow flag")
-	}
-
-	retryAfterMs, ok := result[2].(int64)
-	if !ok {
-		return true, 0, fmt.Errorf("unexpected token bucket retry value")
-	}
-
-	return allowed == 1, time.Duration(retryAfterMs) * time.Millisecond, nil
 }

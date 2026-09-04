@@ -9,47 +9,50 @@ import (
 
 func SetupRoutes(server *api.Server) error {
 	server.App.Static("/photos", "./web/photos")
-	server.App.Static("/assets", "./web/assets")
+	// 静态资源禁止缓存，避免前端 JS 改动后浏览器仍加载旧版本
+	server.App.Static("/assets", "./web/assets", fiber.Static{
+		CacheDuration: -1,
+	})
 
 	server.App.Get("/", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		return c.SendFile("./web/index.html")
 	})
 	server.App.Get("/login", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		return c.SendFile("./web/login.html")
 	})
 	server.App.Get("/register", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		return c.SendFile("./web/register.html")
 	})
 	server.App.Get("/booking", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		return c.SendFile("./web/booking.html")
 	})
 	server.App.Get("/profile", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		return c.SendFile("./web/profile.html")
 	})
 
 	server.App.Post("/register", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).RegisterUser)
 	server.App.Post("/login", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).LoginUser)
 	server.App.Post("/tokens/renew_access", handlers.NewTokenHandler(server.Store, server.TokenMaker, server.Config).RenewAccessToken)
+	server.App.Post("/pay/alipay/notify", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).AlipayNotify)
 	server.App.Get("/cities", handlers.NewCityHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ListCities)
 	server.App.Get("/terminals", handlers.NewTerminalHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ListTerminals)
 	server.App.Get("/routes", handlers.NewRouteHandler(server.Store, server.Redis, server.TokenMaker, server.Config).SearchRoutes)
 	server.App.Get("/routes/:route_id/buses/:bus_id/seats", handlers.NewBusHandler(server.Store, server.TokenMaker, server.Config).ListAvailableSeats)
 
 	authGroup := server.App.Group("/", middleware.AuthMiddleware(server.TokenMaker))
-	purchaseLimiter := middleware.NewPurchaseRateLimiter(server.Redis, server.Config)
 	authGroup.Get("/user/info", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).GetUserProfile)
 	authGroup.Put("/user/update", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).UpdateUserProfile)
 	authGroup.Post("/user/password_change", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ChangePassword)
 	authGroup.Get("/user/tickets", handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ListUserTickets)
-	authGroup.Post("/routes/reserve", purchaseLimiter, handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ReserveSeat)
-	authGroup.Post("/routes/purchase", purchaseLimiter, handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).PurchaseTicket)
-	authGroup.Post("/routes/purchase_async", purchaseLimiter, handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).PurchaseTicketAsync)
-	authGroup.Get("/purchase-tasks/:id", handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).GetPurchaseTaskStatus)
-	authGroup.Post("/orders", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ).CreateOrder)
-	authGroup.Get("/orders/:orderNo", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ).GetOrder)
-	authGroup.Post("/orders/:orderNo/pay", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ).PayOrder)
-	authGroup.Get("/routes/reserve", purchaseLimiter, handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ReserveSeat)
-	authGroup.Get("/routes/purchase", purchaseLimiter, handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).PurchaseTicket)
+	authGroup.Post("/orders", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).CreateOrder)
+	authGroup.Get("/orders/:orderNo", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).GetOrder)
+	authGroup.Post("/orders/:orderNo/pay", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).PayOrder)
+	authGroup.Get("/orders/:orderNo/status", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).GetOrderStatus)
 	authGroup.Delete("/tickets/:id", handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).CancelTicket)
 	return nil
 }

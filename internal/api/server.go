@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/payment"
 	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/token"
 	"github.com/Books-QAQ/tickets/internal/util"
@@ -18,6 +19,8 @@ type Server struct {
 	TokenMaker token.Maker
 	MQ         *queue.RabbitMQ
 	App        *fiber.App
+	// PaymentProviders 支付渠道列表（mock / alipay 等），由 main 注入。
+	PaymentProviders []payment.Provider
 }
 
 func NewServer(config util.Config, store *db.Store, redisClient *redis.Client) (*Server, error) {

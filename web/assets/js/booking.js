@@ -11,7 +11,8 @@ const state = {
   routes: [],
   seats: [],
   selectedRoute: null,
-  selectedSeat: null
+  selectedSeat: null,
+  currentOrder: null
 };
 
 const el = {
@@ -144,8 +145,30 @@ function formatDateOnly(value) {
   return `${year}-${month}-${day}`;
 }
 
+const CITY_NAMES = {
+  Shanghai: "上海",
+  Hangzhou: "杭州",
+  Suzhou: "苏州",
+  Nanjing: "南京",
+  Ningbo: "宁波"
+};
+
+const TERMINAL_NAMES = {
+  "Shanghai South": "上海南",
+  "Shanghai Hongqiao": "上海虹桥",
+  "Hangzhou East": "杭州东",
+  "Hangzhou West": "杭州西",
+  "Suzhou North": "苏州北",
+  "Nanjing South": "南京南",
+  "Ningbo South": "宁波南"
+};
+
+function cn(name) {
+  return CITY_NAMES[name] || TERMINAL_NAMES[name] || name;
+}
+
 function routeLabel(route) {
-  return `${route.origin_city} -> ${route.destination_city}`;
+  return `${cn(route.origin_city)} → ${cn(route.destination_city)}`;
 }
 
 function routeCanPurchase(route) {
@@ -169,7 +192,7 @@ function renderTerminals() {
   }
 
   const options = state.terminals
-    .map((terminal) => `<option value="${terminal.id}">${terminal.name} (ID ${terminal.id})</option>`)
+    .map((terminal) => `<option value="${terminal.id}">${cn(terminal.name)}</option>`)
     .join("");
 
   el.originTerminal.innerHTML = options;
@@ -285,10 +308,27 @@ function renderSeats(route, seats) {
         }).join("")}
       </div>
       <div class="status">${selectedText}</div>
-      <div class="button-row">
-        <button class="btn-ghost" type="button" data-action="reserve-selected" ${selectedSeat && canPurchase ? "" : "disabled"}>预定当前座位</button>
-        <button class="btn-primary" type="button" data-action="purchase-selected" ${selectedSeat && canPurchase ? "" : "disabled"}>直接购票</button>
-      </div>
+      ${state.currentOrder ? `
+        <div class="pay-methods" role="radiogroup" aria-label="支付方式">
+          <label class="pay-method">
+            <input type="radio" name="pay-channel" value="alipay" checked>
+            <span class="pay-method-check"></span>
+            <span class="pay-method-label">支付宝支付</span>
+          </label>
+          <label class="pay-method">
+            <input type="radio" name="pay-channel" value="wechat">
+            <span class="pay-method-check"></span>
+            <span class="pay-method-label">微信支付</span>
+          </label>
+        </div>
+        <div class="button-row">
+          <button class="btn-primary" type="button" data-action="pay-order">支付 ${formatPrice(state.currentOrder.amount)}</button>
+        </div>
+      ` : `
+        <div class="button-row">
+          <button class="btn-primary" type="button" data-action="create-order" ${selectedSeat && canPurchase ? "" : "disabled"}>下单锁定座位</button>
+        </div>
+      `}
     </div>
   `;
 }
@@ -330,6 +370,7 @@ async function loadTerminals() {
     const terminals = await publicRequest("/terminals", { method: "GET" });
     state.terminals = terminals || [];
     renderTerminals();
+    applyQueryParams();
     setTerminalStatus(`已加载 ${state.terminals.length} 个车站选项。`, "success");
   } catch (error) {
     setTerminalStatus(`加载车站失败：${error.message}`, "error");
@@ -415,27 +456,14 @@ async function loadSeatsForRoute(route) {
   }
 }
 
-async function performBooking(action) {
-  if (!state.selectedRoute) {
-    setStatus("请先选择班次。", "error");
+async function createOrder() {
+  if (!state.selectedRoute || !state.selectedSeat) {
+    setStatus("请先选择班次和座位。", "error");
     return;
   }
-
-  if (!routeCanPurchase(state.selectedRoute)) {
-    setStatus(routeSaleMessage(state.selectedRoute), "error");
-    return;
-  }
-
-  if (!state.selectedSeat) {
-    setStatus("请先选择一个可用座位。", "error");
-    return;
-  }
-
-  const endpoint = action === "reserve-selected" ? "/routes/reserve" : "/routes/purchase";
-  const label = action === "reserve-selected" ? "预定" : "购票";
 
   try {
-    const result = await request(endpoint, {
+    const order = await request("/orders", {
       method: "POST",
       body: JSON.stringify({
         route_id: state.selectedRoute.route_id,
@@ -444,12 +472,217 @@ async function performBooking(action) {
       })
     });
 
-    setStatus(`${label}成功：票据 #${result.ticket_id}，座位 ID ${result.seat_id}。`, "success");
+    state.currentOrder = order;
+    setStatus(`下单成功：订单号 ${order.order_no}，金额 ${formatPrice(order.amount)}，请尽快支付。`, "success");
+    renderSeats(state.selectedRoute, state.seats);
+  } catch (error) {
+    setStatus(`下单失败：${error.message}`, "error");
+  }
+}
+
+async function payOrder() {
+  if (!state.currentOrder) {
+    setStatus("当前没有待支付订单。", "error");
+    return;
+  }
+
+  const checked = document.querySelector('input[name="pay-channel"]:checked');
+  const channel = checked ? checked.value : "alipay";
+
+  // 微信支付未接入：诚实提示，不落 mock 分支
+  if (channel === "wechat") {
+    setStatus("微信支付需企业商户号，暂未接入；请选择支付宝支付。", "error");
+    return;
+  }
+
+  const orderNo = state.currentOrder.order_no;
+  try {
+    const result = await request(`/orders/${orderNo}/pay`, {
+      method: "POST",
+      body: JSON.stringify({ channel })
+    });
+
+    // 支付宝渠道：弹出中央悬浮二维码弹窗，扫码付款后自动轮询确认
+    if (channel === "alipay" && result.qr_code) {
+      showPayModal(result.qr_code, orderNo, state.currentOrder.expires_at);
+      setStatus(`已生成支付宝二维码，请扫码支付 ${formatPrice(state.currentOrder.amount)}。`, "success");
+      // 开始轮询订单状态（扫码付款后自动出票）
+      pollOrderStatus(orderNo);
+      return;
+    }
+
+    // mock 渠道：直接出票成功
+    state.currentOrder = null;
+    state.selectedSeat = null;
     await loadSeatsForRoute(state.selectedRoute);
     await loadTickets();
+    setStatus(`支付成功：订单 ${orderNo} 已完成支付，出票 #${result.ticket_id}。`, "success");
   } catch (error) {
-    setStatus(`${label}失败：${error.message}`, "error");
+    // 订单已过期：禁用按钮 + 明确提示
+    if (error.message && error.message.includes("expired")) {
+      disablePayActions();
+      hidePayModal();
+      setStatus("订单已超时，请重新选座下单。", "error");
+      return;
+    }
+    setStatus(`支付失败：${error.message}`, "error");
   }
+}
+
+// 弹出中央悬浮二维码弹窗（qr_code 是支付宝返回的码串，如 https://qr.alipay.com/xxx）
+function showPayModal(qrCode, orderNo, expiresAt) {
+  const modal = document.getElementById("pay-modal");
+  const qrBox = document.getElementById("pay-modal-qr");
+  const orderBox = document.getElementById("pay-modal-order");
+  if (!modal || !qrBox) {
+    return;
+  }
+
+  renderQrInto(qrBox, qrCode);
+  if (orderBox) {
+    orderBox.textContent = `订单号：${orderNo}`;
+  }
+
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+
+  // 启动支付剩余时间倒计时
+  startCountdown(expiresAt);
+}
+
+function renderQrInto(qrBox, qrCode) {
+  // 用 qrserver 公共 API 将码串渲染为二维码图片（客户端生成，无后端依赖）
+  const imgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrCode)}`;
+  qrBox.innerHTML = `<img src="${imgUrl}" alt="支付宝支付二维码" width="220" height="220" />`;
+}
+
+function hidePayModal() {
+  const modal = document.getElementById("pay-modal");
+  if (modal) {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+  }
+  stopCountdown();
+}
+
+// 倒计时：显示订单剩余支付时间，到 0 提示超时并停止
+let countdownTimer = null;
+
+function startCountdown(expiresAt) {
+  stopCountdown();
+  const el = document.getElementById("pay-modal-countdown");
+  if (!el) {
+    return;
+  }
+
+  const deadline = expiresAt ? new Date(expiresAt).getTime() : null;
+  if (!deadline || Number.isNaN(deadline)) {
+    el.textContent = "";
+    return;
+  }
+
+  const tick = () => {
+    const remain = deadline - Date.now();
+    if (remain <= 0) {
+      el.textContent = "订单已超时，请关闭弹窗重新下单";
+      el.dataset.tone = "danger";
+      stopCountdown();
+      // 超时后禁用支付相关按钮，防止继续触发支付
+      disablePayActions();
+      return;
+    }
+    const totalSec = Math.ceil(remain / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    el.textContent = `支付剩余时间 ${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    el.dataset.tone = totalSec <= 60 ? "danger" : "";
+  };
+
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
+
+function stopCountdown() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+}
+
+// 手动刷新二维码：重新调用支付接口获取新的支付宝二维码
+async function refreshPayQr() {
+  if (!state.currentOrder) {
+    return;
+  }
+  const orderNo = state.currentOrder.order_no;
+  try {
+    const result = await request(`/orders/${orderNo}/pay`, {
+      method: "POST",
+      body: JSON.stringify({ channel: "alipay" })
+    });
+    if (result.qr_code) {
+      const qrBox = document.getElementById("pay-modal-qr");
+      renderQrInto(qrBox, result.qr_code);
+      setStatus("二维码已刷新，请扫码支付。", "success");
+    }
+  } catch (error) {
+    // 订单已过期：禁用按钮 + 关弹窗 + 明确提示
+    if (error.message && error.message.includes("expired")) {
+      disablePayActions();
+      hidePayModal();
+      setStatus("订单已超时，请重新选座下单。", "error");
+      return;
+    }
+    setStatus(`刷新二维码失败：${error.message}`, "error");
+  }
+}
+
+// 订单过期后禁用支付相关操作
+function disablePayActions() {
+  const refreshBtn = document.querySelector('button[data-action="refresh-pay-qr"]');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+  }
+  const payBtn = document.querySelector('button[data-action="pay-order"]');
+  if (payBtn) {
+    payBtn.disabled = true;
+  }
+}
+
+// 支付宝付款跳回后，轮询订单状态确认支付（主动查单兜底）
+async function pollOrderStatus(orderNo) {
+  const maxAttempts = 30; // 最多轮询 30 次（约 60 秒）
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const result = await request(`/orders/${orderNo}/status`, { method: "GET" });
+      if (result.status === "paid" || result.status === "already_paid") {
+        hidePayModal();
+        state.currentOrder = null;
+        state.selectedSeat = null;
+        setStatus(`支付成功：订单 ${orderNo} 已完成支付，出票 #${result.ticket_id || "—"}。`, "success");
+        await loadTickets();
+        if (state.selectedRoute) {
+          await loadSeatsForRoute(state.selectedRoute);
+        }
+        return;
+      }
+      if (result.status !== "pending") {
+        // 订单被关单/取消/过期：关闭弹窗 + 禁用支付 + 提示
+        hidePayModal();
+        disablePayActions();
+        if (result.status === "canceled") {
+          setStatus(`订单已超时关闭，请重新选座下单。`, "error");
+        } else {
+          setStatus(`订单状态：${result.status}`, "error");
+        }
+        return;
+      }
+    } catch (error) {
+      // 轮询期间接口异常，继续重试
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  setStatus(`订单 ${orderNo} 仍在等待支付确认，请稍后在个人中心查看。`, "error");
 }
 
 async function cancelTicket(ticketId) {
@@ -475,6 +708,21 @@ function setDefaultDate() {
   const now = new Date();
   now.setDate(now.getDate() + 1);
   el.departureDate.value = formatDateOnly(now);
+}
+
+function applyQueryParams() {
+  const params = new URLSearchParams(window.location.search);
+  const origin = params.get("origin");
+  const dest = params.get("dest");
+  const date = params.get("date");
+
+  if (origin) el.originTerminal.value = origin;
+  if (dest) el.destinationTerminal.value = dest;
+  if (date) el.departureDate.value = date;
+
+  if (origin && dest && date) {
+    el.searchForm.requestSubmit();
+  }
 }
 
 document.addEventListener("click", async (event) => {
@@ -513,8 +761,23 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "reserve-selected" || action === "purchase-selected") {
-    await performBooking(action);
+  if (action === "create-order") {
+    await createOrder();
+    return;
+  }
+
+  if (action === "pay-order") {
+    await payOrder();
+    return;
+  }
+
+  if (action === "close-pay-modal") {
+    hidePayModal();
+    return;
+  }
+
+  if (action === "refresh-pay-qr") {
+    await refreshPayQr();
     return;
   }
 
@@ -534,3 +797,13 @@ setDefaultDate();
 loadTerminals();
 loadProfile();
 loadTickets();
+
+// 支付宝付款跳回时携带 orderNo 参数，自动轮询确认支付
+(function handleAlipayReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const orderNo = params.get("orderNo");
+  if (orderNo) {
+    setStatus(`检测到支付返回，正在确认订单 ${orderNo} 的支付状态…`, "success");
+    pollOrderStatus(orderNo);
+  }
+})();

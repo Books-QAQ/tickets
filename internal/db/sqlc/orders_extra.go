@@ -70,10 +70,12 @@ func (q *Queries) GetOrderByNo(ctx context.Context, orderNo string) (Order, erro
 
 // claimOrderPayment 条件更新订单状态 pending→paid，返回是否抢到状态变更。
 // 这是支付幂等的核心：重复回调时 RowsAffected=0，不会重复出票。
+// expired_at > NOW() 是防"订单过期仍可支付"的最终防线：一旦过期，无论
+// mock 直付还是支付宝回调/查单，条件都不成立，支付必然失败。
 const claimOrderPayment = `
 UPDATE orders
 SET status = 'paid', paid_at = NOW(), pay_channel = ?
-WHERE order_no = ? AND user_id = ? AND status = 'pending'
+WHERE order_no = ? AND user_id = ? AND status = 'pending' AND expired_at > NOW()
 `
 
 func (q *Queries) ClaimOrderPayment(ctx context.Context, orderNo string, userID int32, channel string) (bool, error) {
@@ -86,6 +88,42 @@ func (q *Queries) ClaimOrderPayment(ctx context.Context, orderNo string, userID 
 		return false, err
 	}
 	return affected == 1, nil
+}
+
+// settleOrderPayment 条件更新订单 pending→paid，用于"已确认付款的补出票"。
+// 与 claimOrderPayment 的区别：不带 expired_at > NOW() 条件。
+// 场景：买家在订单过期前已付款，但异步通知/查单在过期后才到达——
+// 此时钱已真实扣除，必须出票（否则钱悬空），所以不能用过期条件拦截。
+// 与 ClaimOrderCancel 共用 status='pending' 条件，关单与补出票仍在 DB 层互斥。
+const settleOrderPayment = `
+UPDATE orders
+SET status = 'paid', paid_at = NOW(), pay_channel = ?
+WHERE order_no = ? AND user_id = ? AND status = 'pending'
+`
+
+func (q *Queries) SettleOrderPayment(ctx context.Context, orderNo string, userID int32, channel string) (bool, error) {
+	res, err := q.db.ExecContext(ctx, settleOrderPayment, channel, orderNo, userID)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
+}
+
+// setOrderChannel 在发起支付时将渠道写回订单（仅 pending 状态可写），
+// 后续主动查单（GetOrderStatus）据此选择正确的渠道，避免 NULL 渠道默认回 mock。
+const setOrderChannel = `
+UPDATE orders
+SET pay_channel = ?
+WHERE order_no = ? AND status = 'pending'
+`
+
+func (q *Queries) SetOrderChannel(ctx context.Context, orderNo string, channel string) error {
+	_, err := q.db.ExecContext(ctx, setOrderChannel, channel, orderNo)
+	return err
 }
 
 // claimOrderCancel 条件更新订单 pending→canceled，返回是否抢到状态变更。

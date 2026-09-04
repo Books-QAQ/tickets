@@ -16,6 +16,7 @@ import (
 	"github.com/Books-QAQ/tickets/internal/bootstrap"
 	"github.com/Books-QAQ/tickets/internal/cache"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/payment"
 	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/routes"
 	"github.com/Books-QAQ/tickets/internal/util"
@@ -97,6 +98,21 @@ func main() {
 	}
 	server.MQ = mq
 
+	// 注入支付渠道：mock（始终可用）+ 支付宝（未配置密钥时降级禁用）
+	mockProvider := payment.NewMockProvider()
+	alipayProvider, err := payment.NewAlipayProvider(payment.AlipayConfig{
+		AppID:          config.ALIPAYAPPID,
+		PrivateKey:     config.ALIPAYPRIVATEKEY,
+		AlipayPubKey:   config.ALIPAYPUBLICKEY,
+		IsProduction:   config.ALIPAYISPRODUCTION,
+		TimeoutExpress: orderExpireToAlipay(config.OrderExpireDuration),
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("cannot init alipay provider, alipay channel disabled")
+		alipayProvider, _ = payment.NewAlipayProvider(payment.AlipayConfig{})
+	}
+	server.PaymentProviders = []payment.Provider{mockProvider, alipayProvider}
+
 	appCtx := context.Background()
 
 	if err := bootstrap.EnsureDemoData(appCtx, dbConn); err != nil {
@@ -104,11 +120,10 @@ func main() {
 	}
 
 	bootstrap.StartDemoDataScheduler(appCtx, dbConn)
-	worker.StartPurchaseWorker(appCtx, store, redisClient, config)
 	if mq != nil {
-		worker.StartOrderExpiryConsumer(appCtx, store, mq)
+		worker.StartOrderExpiryConsumer(appCtx, store, mq, alipayProvider)
 	}
-	worker.StartOrderExpiryFallbackScanner(appCtx, store, config)
+	worker.StartOrderExpiryFallbackScanner(appCtx, store, config, alipayProvider)
 
 	if err := routes.SetupRoutes(server); err != nil {
 		log.Fatal().Err(err).Msg("failed to set up routes")
@@ -117,6 +132,23 @@ func main() {
 	if err := server.Start(config.APPPORT); err != nil {
 		log.Fatal().Err(err).Msg("cannot start server")
 	}
+}
+
+// orderExpireToAlipay 将订单过期时长换算成支付宝 timeout_express 格式。
+// 支付宝要求：1m～15d，m-分钟、h-小时、d-天，不接受小数点。
+// 我们统一用分钟表示（如 15m），与订单 expired_at 对齐。
+func orderExpireToAlipay(d time.Duration) string {
+	if d <= 0 {
+		return ""
+	}
+	minutes := int64(d.Minutes())
+	if minutes < 1 {
+		minutes = 1 // 支付宝最小 1m
+	}
+	if minutes > 15*24*60 {
+		return "15d" // 支付宝最大 15d
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 func runDBMigration(migrationURL string, dbSource string) {

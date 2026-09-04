@@ -20,22 +20,35 @@ type PayOrderTxResult struct {
 	Status   string `json:"status"` // paid / already_paid
 }
 
-// PayOrderTx 支付出票：把"订单 pending→paid"与"座位出票"放在同一个事务里，
-// 保证"订单已支付"和"座位已售出"的原子性与幂等。
-//
-// 幂等保证：ClaimOrderPayment 用 WHERE status='pending' 条件更新，重复支付回调
-// 时 RowsAffected=0，走 already_paid 分支，不会重复出票。
+// PayOrderTx 主动支付出票：把"订单 pending→paid"与"座位出票"放在同一个事务里。
+// 走 claimOrderPayment（带 expired_at > NOW() 条件），订单过期则拒绝支付。
 func (store *Store) PayOrderTx(ctx context.Context, arg PayOrderTxParams) (PayOrderTxResult, error) {
+	return store.payOrderTx(ctx, arg, false)
+}
+
+// SettleOrderTx 补出票：用于"已确认付款但订单可能已过期"的场景（异步通知/查单兜底）。
+// 走 settleOrderPayment（不带过期条件），钱已扣则必须出票，避免钱悬空。
+func (store *Store) SettleOrderTx(ctx context.Context, arg PayOrderTxParams) (PayOrderTxResult, error) {
+	return store.payOrderTx(ctx, arg, true)
+}
+
+func (store *Store) payOrderTx(ctx context.Context, arg PayOrderTxParams, settle bool) (PayOrderTxResult, error) {
 	var result PayOrderTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		// ① 条件更新订单 pending→paid（幂等核心）
-		claimed, err := q.ClaimOrderPayment(ctx, arg.OrderNo, arg.UserID, arg.Channel)
+		var claimed bool
+		var err error
+		if settle {
+			claimed, err = q.SettleOrderPayment(ctx, arg.OrderNo, arg.UserID, arg.Channel)
+		} else {
+			claimed, err = q.ClaimOrderPayment(ctx, arg.OrderNo, arg.UserID, arg.Channel)
+		}
 		if err != nil {
 			return err
 		}
 		if !claimed {
-			// 没抢到状态变更：可能是重复支付（已 paid），也可能是已取消/退款
+			// 没抢到状态变更：可能是重复支付（已 paid），也可能已取消/退款/过期
 			order, err := q.GetOrderByNo(ctx, arg.OrderNo)
 			if err != nil {
 				return err
@@ -43,6 +56,9 @@ func (store *Store) PayOrderTx(ctx context.Context, arg PayOrderTxParams) (PayOr
 			if order.Status == "paid" {
 				result.Status = "already_paid"
 				return nil
+			}
+			if order.Status == "pending" && time.Now().After(order.ExpiredAt) {
+				return fmt.Errorf("order has expired")
 			}
 			return fmt.Errorf("order is not payable, current status: %s", order.Status)
 		}

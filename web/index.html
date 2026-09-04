@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>票务系统 | 首页</title>
-  <link rel="stylesheet" href="/assets/css/base.css">
-  <link rel="stylesheet" href="/assets/css/index.css">
-  <script src="/assets/js/index.js" defer></script>
+  <link rel="stylesheet" href="/assets/css/base.css?v=20260818-3">
+  <link rel="stylesheet" href="/assets/css/index.css?v=20260818-3">
+  <script src="/assets/js/index.js?v=20260818-3" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -15,107 +15,120 @@
         <span class="brand-badge">TM</span>
         <span>智慧客运票务系统</span>
       </a>
-      <nav class="nav-links" aria-label="主导航">
-        <a class="is-primary" href="/">首页</a>
-        <a href="/booking">购票</a>
-        <a href="/profile">个人中心</a>
-        <a href="/login">登录</a>
-        <a href="/register">注册</a>
-      </nav>
+      <div class="topbar-right">
+        <nav class="nav-links" aria-label="主导航">
+          <a class="is-primary" href="/">首页</a>
+          <a href="/booking">购票</a>
+          <a href="/profile">个人中心</a>
+        </nav>
+        <a class="nav-ghost" href="/login">登录</a>
+        <a class="nav-solid" href="/register">注册</a>
+      </div>
     </div>
   </header>
 
   <main>
-    <section class="carousel-stage" aria-label="首页轮播图">
-      <div class="carousel-shell">
-        <button class="carousel-arrow prev" id="carousel-prev" type="button" aria-label="上一张">&#10094;</button>
-        <div class="carousel-track">
-          <article class="carousel-slide is-active">
-            <img src="/photos/bus.jpg" alt="客运车辆展示">
-            <div class="carousel-overlay">
-              <strong>客运车辆展示</strong>
-              <span>围绕班次查询、在线选座与订单管理，构建完整的客运票务体验。</span>
-            </div>
-          </article>
-          <article class="carousel-slide">
-            <img src="/photos/29412585_131322047083_2.jpg" alt="站点与出行服务场景">
-            <div class="carousel-overlay">
-              <strong>站点与出行服务</strong>
-              <span>适合展示线路规划、乘客出行流程以及站点运营相关的业务场景。</span>
-            </div>
-          </article>
-          <article class="carousel-slide">
-            <img src="/photos/72899323877e4.png" alt="智慧出行与票务平台场景">
-            <div class="carousel-overlay">
-              <strong>智慧出行与票务平台</strong>
-              <span>作为系统首页主视觉，强化“查票、购票、管理订单”一体化体验。</span>
-            </div>
-          </article>
+    <!-- Hero -->
+    <section class="hero-section">
+      <div class="shell hero-inner">
+        <div class="hero-copy">
+          <span class="eyebrow">在线购票 · 实时选座 · 订单管理</span>
+          <h1>从查票到出票，<br>一步到位</h1>
+          <p class="lead">班次查询、在线选座、下单支付，完整的客运票务闭环体验。</p>
+          <div class="hero-actions">
+            <a class="btn-primary" href="/booking">立即购票</a>
+            <a class="btn-accent" href="#search">查询车次</a>
+          </div>
+          <div class="hero-stats">
+            <div class="stat"><strong>6</strong><span>覆盖城市</span></div>
+            <div class="stat"><strong>8</strong><span>客运站点</span></div>
+            <div class="stat"><strong>3</strong><span>核心能力</span></div>
+          </div>
         </div>
-        <button class="carousel-arrow next" id="carousel-next" type="button" aria-label="下一张">&#10095;</button>
-        <div class="carousel-dots">
-          <button class="carousel-dot is-active" type="button" aria-label="跳到第 1 张"></button>
-          <button class="carousel-dot" type="button" aria-label="跳到第 2 张"></button>
-          <button class="carousel-dot" type="button" aria-label="跳到第 3 张"></button>
+        <div class="hero-visual">
+          <img src="/photos/bus.jpg" alt="客运车辆">
         </div>
       </div>
     </section>
 
-    <div class="shell">
-      <section class="section">
-        <div class="section-head">
-          <h2>平台宣传</h2>
-          <p>首页主要承担平台介绍和能力展示，帮助用户快速理解系统做什么、能完成哪些核心操作。</p>
-        </div>
-        <div class="grid">
-          <article class="panel span-4">
-            <strong>快速查票</strong>
-            <p>按照出发站、到达站和日期查询线路，并加载班次对应的座位状态，减少重复跳转。</p>
-          </article>
-          <article class="panel span-4">
-            <strong>实时座位视图</strong>
-            <p>购票页会展示座位可用状态，适合演示预定、直接购票与退票回滚流程。</p>
-          </article>
-          <article class="panel span-4">
-            <strong>个人中心归档</strong>
-            <p>个人中心按购票历史、待出行、待付款分类展示票据记录，方便管理订单。</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="section-head">
-          <h2>出行政策</h2>
-        </div>
-        <div class="grid">
-          <article class="panel span-6">
-            <strong>购票与改退规则</strong>
-            <p>平台支持在线选座购票、已购票查询与退票操作。若订单状态为待付款或已预定，请在有效期内及时完成处理，避免座位释放后影响行程安排。</p>
-            <ul>
-              <li>下单后请核对出发时间、班次和座位号。</li>
-              <li>若已不再出行，请尽快退票，方便座位回流。</li>
-              <li>同一用户的购票记录可在个人中心统一查看。</li>
-            </ul>
-          </article>
-          <article class="panel span-6">
-            <strong>实名与账户安全</strong>
-            <p>正式部署时建议增加短信验证、验证码、登录频率限制和更严格的身份校验。当前页面结构已经预留了独立登录页和注册页，方便后续继续扩展这些能力。</p>
-            <ul>
-              <li>不要在公共电脑保存登录状态。</li>
-              <li>密码建议使用独立组合，不与其他系统共用。</li>
-              <li>如账户异常，请及时重置密码并清理登录态。</li>
-            </ul>
-          </article>
-        </div>
-        <div class="cta-strip">
-          <p>如果你准备体验完整流程，现在可以跳转到登录页或注册页。登录成功后会自动进入购票页，个人中心也会通过鉴权接口拉取你的票据记录。</p>
-          <div class="actions">
-            <a class="button-link btn-primary" href="/login">去登录</a>
-            <a class="button-link btn-accent" href="/register">去注册</a>
+    <!-- 车票查询条 -->
+    <section class="search-section" id="search">
+      <div class="shell">
+        <form class="search-bar" id="search-bar">
+          <div class="search-field">
+            <label for="origin-terminal">出发站</label>
+            <select id="origin-terminal" required></select>
           </div>
+          <div class="search-field">
+            <label for="destination-terminal">到达站</label>
+            <select id="destination-terminal" required></select>
+          </div>
+          <div class="search-field">
+            <label for="departure-date">出发日期</label>
+            <input id="departure-date" type="date" required>
+          </div>
+          <button class="btn-primary search-submit" type="submit">查询班次</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 热门线路 -->
+    <section class="shell section">
+      <div class="section-head">
+        <h2>热门线路</h2>
+        <p class="lead">精选高频出行线路，实时余票与价格。</p>
+      </div>
+      <div class="route-grid" id="route-grid">
+        <div class="empty">正在加载热门线路…</div>
+      </div>
+    </section>
+
+    <!-- 平台能力 -->
+    <section class="shell section">
+      <div class="section-head">
+        <h2>平台能力</h2>
+        <p class="lead">围绕「查票 — 选座 — 出票」的核心流程构建。</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <div class="feature-icon">查</div>
+          <h3>快速查票</h3>
+          <p>按出发站、到达站与日期查询班次，实时返回余票与价格。</p>
+          <a class="feature-link" href="/booking">立即体验 <span>→</span></a>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon">座</div>
+          <h3>在线选座</h3>
+          <p>可视化座位图实时显示可用 / 已售状态，一键锁定座位。</p>
+          <a class="feature-link" href="/booking">立即体验 <span>→</span></a>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon">单</div>
+          <h3>订单管理</h3>
+          <p>下单、支付、退票全流程归档，个人中心统一查看。</p>
+          <a class="feature-link" href="/profile">立即体验 <span>→</span></a>
+        </article>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+      <div class="shell footer-inner">
+        <div class="footer-brand">
+          <a class="brand" href="/">
+            <span class="brand-badge">TM</span>
+            <span>智慧客运票务系统</span>
+          </a>
+          <p>围绕班次查询、在线选座与订单管理构建的完整客运票务体验。</p>
         </div>
-      </section>
-    </div>
+        <div class="footer-links">
+          <a href="/booking">购票</a>
+          <a href="/profile">个人中心</a>
+          <a href="/login">登录</a>
+          <a href="/register">注册</a>
+        </div>
+      </div>
+    </footer>
   </main>
 </body>
 </html>

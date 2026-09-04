@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>票务系统 | 购票</title>
-  <link rel="stylesheet" href="/assets/css/base.css?v=20260618-1">
-  <link rel="stylesheet" href="/assets/css/booking.css?v=20260618-1">
-  <script src="/assets/js/booking.js?v=20260618-1" defer></script>
+  <link rel="stylesheet" href="/assets/css/base.css?v=20260818-4">
+  <link rel="stylesheet" href="/assets/css/booking.css?v=20260818-4">
+  <script src="/assets/js/booking.js?v=20260818-9" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -15,25 +15,30 @@
         <span class="brand-badge">TM</span>
         <span>智慧客运票务系统</span>
       </a>
-      <nav class="nav-links" aria-label="主导航">
-        <a href="/">首页</a>
-        <a class="is-primary" href="/booking">购票</a>
-        <a href="/profile">个人中心</a>
-        <a href="/login">登录</a>
-        <a href="/register">注册</a>
-      </nav>
+      <div class="topbar-right">
+        <nav class="nav-links" aria-label="主导航">
+          <a href="/">首页</a>
+          <a class="is-primary" href="/booking">购票</a>
+          <a href="/profile">个人中心</a>
+        </nav>
+        <button class="btn-danger btn-sm" id="logout-button" type="button">退出登录</button>
+      </div>
     </div>
   </header>
 
   <main class="shell">
-    <section class="hero">
-      <h1>查询班次、选择座位并完成购票</h1>
-      <div class="hero-actions">
-        <button class="btn-ghost" id="refresh-button" type="button">刷新账户信息</button>
-        <button class="btn-danger" id="logout-button" type="button">退出登录</button>
+    <section class="page-head">
+      <div class="page-head-copy">
+        <div class="eyebrow">购票</div>
+        <h1>查询班次、选择座位并完成购票</h1>
+        <p class="lead">选择出发站、到达站和出发日期，系统会返回可售班次，选座后即可下单支付。</p>
       </div>
-      <div class="status" id="app-status">购票页已就绪，正在恢复登录状态。</div>
+      <div class="page-head-actions">
+        <button class="btn-ghost" id="refresh-button" type="button">刷新账户信息</button>
+      </div>
     </section>
+
+    <div class="status" id="app-status">购票页已就绪，正在恢复登录状态。</div>
 
     <section class="layout">
       <article class="card span-12">
@@ -54,7 +59,7 @@
             出发日期
             <input id="departure-date" type="date" required>
           </label>
-          <button class="btn-accent" type="submit">查询可售班次</button>
+          <button class="btn-primary" type="submit">查询可售班次</button>
         </form>
       </article>
 
@@ -84,5 +89,23 @@
       </article>
     </section>
   </main>
+
+  <!-- 支付二维码悬浮弹窗 -->
+  <div class="pay-modal" id="pay-modal" aria-hidden="true">
+    <div class="pay-modal-backdrop" data-action="close-pay-modal"></div>
+    <div class="pay-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pay-modal-title">
+      <div class="pay-modal-head">
+        <span class="pay-modal-title" id="pay-modal-title">支付宝扫码支付</span>
+        <button class="pay-modal-close" type="button" data-action="close-pay-modal" aria-label="关闭">×</button>
+      </div>
+      <div class="pay-modal-body">
+        <div class="pay-modal-qr" id="pay-modal-qr"></div>
+        <div class="pay-modal-tip">请使用支付宝「扫一扫」付款</div>
+        <div class="pay-modal-order" id="pay-modal-order"></div>
+        <div class="pay-modal-countdown" id="pay-modal-countdown"></div>
+        <button class="pay-modal-refresh" type="button" data-action="refresh-pay-qr">刷新二维码</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
