@@ -158,8 +158,8 @@ $slide2 = New-SlideXml -Title 'Architecture and Core Design' -Lines @(
     'Data layer: sqlc maps SQL to Go code, while MySQL stores users, routes, trips, seats and tickets.'
     'Consistency: purchase and refund rely on MySQL transactions and conditional updates.'
     'Caching: Cache Aside is used for cities, terminals and trip queries to reduce read pressure.'
-    'Flow control: login uses fixed-window rate limiting and purchase uses token-bucket rate limiting.'
-    'High concurrency: Redis seat hold plus async queue smoothing reduce seat conflicts and DB spikes.'
+    'Flow control: login uses fixed-window rate limiting; order creation is guarded by Redis seat hold lock and MySQL conditional updates.'
+    'High concurrency: Redis seat hold lock for fast sharding plus MySQL conditional update as the final arbiter prevent overselling.'
 )
 
 $slide3 = New-SlideXml -Title 'Testing and Project Highlights' -Lines @(

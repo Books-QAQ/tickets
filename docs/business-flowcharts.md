@@ -49,68 +49,70 @@ flowchart TD
     H --> I[返回班次列表]
 ```
 
-## 4. 同步购票
+## 4. 下单（创建订单）
 
 ```mermaid
 flowchart TD
-    A[用户选择班次和座位] --> B[请求 purchase 接口]
+    A[用户选择班次和座位] --> B[请求 orders 接口]
     B --> C[JWT 鉴权]
-    C --> D[令牌桶限流]
-    D --> E{是否超限}
-    E -- 是 --> F[返回 429 购票过于频繁]
-    E -- 否 --> G[校验班次与座位关系]
-    G --> H[检查 seat 是否 available]
-    H --> I[检查班次是否已开售]
-    I --> J[查询当前用户]
-    J --> K[执行 PurchaseTicketTx]
-    K --> L[事务内更新座位状态]
-    L --> M[写入 seat_reservations]
-    M --> N[写入 tickets]
+    C --> D[校验班次与座位关系]
+    D --> E[检查 seat 是否 available]
+    E --> F[检查班次是否已开售]
+    F --> G[Redis SETNX 临时预占座位<br/>key=seat hold busID seatID]
+    G --> H{是否预占成功}
+    H -- 否 --> I[返回 409 座位被其他请求占用]
+    H -- 是 --> J[MySQL 事务]
+    J --> K[条件更新 bus_seats<br/>available 改为 reserved]
+    K --> L{影响行数是否为 1}
+    L -- 否 --> M[回滚 释放 Redis 锁<br/>返回 409 座位不可用]
+    L -- 是 --> N[写入 orders 表<br/>status=pending]
+    N --> O[提交事务 返回订单号]
+    O --> P[发布关单延迟消息到 RabbitMQ<br/>DLX+TTL 15 分钟]
+    P --> Q[返回 201 下单成功]
+```
+
+## 5. 支付与出票
+
+```mermaid
+flowchart TD
+    A[用户对待支付订单发起支付] --> B{支付渠道}
+    B -- mock --> C[条件更新 orders<br/>pending 改为 paid<br/>且 expired_at 大于当前时间]
+    B -- alipay --> D[支付宝预下单 precreate<br/>生成付款二维码]
+    D --> E[前端展示二维码 用户扫码付款]
+    E --> F[主动查单 trade query<br/>或支付宝异步通知 notify]
+    F --> G{支付宝是否已付款}
+    G -- 否 --> H[保持 pending 等待用户付款]
+    G -- 是 --> C
+    C --> I{影响行数是否为 1}
+    I -- 否 --> J[已是 paid 重复支付<br/>直接返回 不重复出票]
+    I -- 是 --> K[条件更新座位 reserved 改为 purchased]
+    K --> L[写入 seat_reservations]
+    L --> M[写入 tickets]
+    M --> N[提交事务 释放 Redis 锁]
     N --> O[删除对应班次缓存]
-    O --> P[返回购票成功]
+    O --> P[返回出票成功]
 ```
 
-## 5. 异步购票削峰
+## 6. 订单超时关单
 
 ```mermaid
 flowchart TD
-    A[用户选择班次和座位] --> B[请求 purchase_async 接口]
-    B --> C[JWT 鉴权]
-    C --> D[令牌桶限流]
-    D --> E[校验班次 座位 开售状态]
-    E --> F[Redis SETNX 临时预占座位]
-    F --> G{是否预占成功}
-    G -- 否 --> H[返回 409 座位被其他请求占用]
-    G -- 是 --> I[写入任务状态 queued]
-    I --> J[消息入 Redis 队列 queue purchase]
-    J --> K[接口立即返回 已排队]
-    K --> L[后台 worker 阻塞消费队列]
-    L --> M[校验预占锁是否仍归属当前请求]
-    M --> N[执行 PurchaseTicketTx]
-    N --> O{事务是否成功}
-    O -- 否 --> P[释放座位预占锁]
-    P --> Q[任务状态改为 failed]
-    O -- 是 --> R[释放座位预占锁]
-    R --> S[删除班次缓存]
-    S --> T[任务状态改为 succeeded]
-```
-
-## 6. 座位预定
-
-```mermaid
-flowchart TD
-    A[用户选择班次和座位] --> B[请求 reserve 接口]
-    B --> C[JWT 鉴权]
-    C --> D[令牌桶限流]
-    D --> E[校验班次与座位]
-    E --> F[检查座位是否可用]
-    F --> G[检查班次是否已开售]
-    G --> H[查询当前用户]
-    H --> I[执行 ReserveTicketTx]
-    I --> J[写入预定记录]
-    J --> K[更新座位状态]
-    K --> L[删除班次缓存]
-    L --> M[返回预定成功]
+    A[RabbitMQ 延迟消息到期<br/>或兜底扫描器发现过期订单] --> B[读取订单]
+    B --> C{订单状态是否为 pending}
+    C -- 否 --> D[已支付或已关闭<br/>直接跳过]
+    C -- 是 --> E{是否为支付宝渠道}
+    E -- 是 --> F[主动查询支付宝交易状态]
+    F --> G{是否已付款}
+    G -- 是 --> H[补出票 settle<br/>钱已扣必须出票 避免悬空]
+    G -- 否 --> I[执行关单事务]
+    F -- 查单失败 --> J[保守跳过<br/>下一轮再查 避免误关已付款订单]
+    E -- 否 --> I
+    I --> K[条件更新 orders<br/>pending 改为 canceled]
+    K --> L{影响行数是否为 1}
+    L -- 否 --> M[竞态 支付已先到达<br/>跳过 不释放座位]
+    L -- 是 --> N[条件更新座位 reserved 改为 available]
+    N --> O[释放 Redis 锁 删除班次缓存]
+    O --> P[关单完成]
 ```
 
 ## 7. 退票
@@ -171,46 +173,41 @@ flowchart TD
     E --> F[组装班次结果并写入 Redis 缓存]
     F --> D
 
-    D --> G[用户选择班次和座位后发起购票]
+    D --> G[用户选择班次和座位后发起下单]
     G --> H[JWT 鉴权]
-    H --> I[Redis 令牌桶限流]
-    I --> J{是否超限?}
-    J -- 是 --> K[返回 429]
-    J -- 否 --> L[校验班次 座位 开售状态]
+    H --> I[Redis SETNX 临时预占座位]
+    I --> J{预占是否成功?}
+    J -- 否 --> K[返回 409 座位被占用]
+    J -- 是 --> L[进入 MySQL 下单事务]
 
-    L --> M{是否走异步购票?}
-    M -- 是 --> N[Redis SETNX 临时预占座位]
-    N --> O{预占是否成功?}
-    O -- 否 --> P[返回 409 座位被占用]
-    O -- 是 --> Q[请求写入 Redis 队列]
-    Q --> R[Worker 消费队列]
-    R --> S[进入 MySQL 购票事务]
+    L --> M[条件更新 bus_seats<br/>available 改为 reserved]
+    M --> N{更新影响行数是否为 1?}
+    N -- 否 --> O[回滚并释放 Redis 锁<br/>返回 409 座位已被抢走]
+    N -- 是 --> P[写入 orders 表<br/>status=pending]
+    P --> Q[提交事务 发布关单延迟消息到 RabbitMQ]
 
-    M -- 否 --> S
+    Q --> R[用户对订单发起支付]
+    R --> S{是否支付宝渠道}
+    S -- 是 --> T[precreate 生成二维码 用户扫码付款]
+    T --> U[查单或异步通知确认已付款]
+    U --> V[进入出票事务]
+    S -- 否 --> V
 
-    S --> T[条件更新 bus_seats<br/>where status = available]
-    T --> U{更新影响行数是否为 1?}
-    U -- 否 --> V[事务失败<br/>说明座位已被其他并发请求抢走]
-    U -- 是 --> W[写入 seat_reservations]
-    W --> X[写入 tickets]
-    X --> Y[提交事务]
+    V --> W[条件更新 orders<br/>pending 改为 paid]
+    W --> X{影响行数是否为 1}
+    X -- 否 --> Y[重复支付 已 paid<br/>直接返回 不重复出票]
+    X -- 是 --> Z[条件更新座位 reserved 改为 purchased]
+    Z --> AA[写入 seat_reservations]
+    AA --> AB[写入 tickets]
+    AB --> AC[提交事务 释放 Redis 锁]
 
-    Y --> Z[删除对应 routes 缓存]
-    Z --> AA[返回购票成功]
-
-    V --> AB{是否异步模式?}
-    AB -- 是 --> AC[释放 Redis 临时预占锁]
-    AC --> AD[任务状态置为 failed]
-    AB -- 否 --> AE[返回购票失败]
-
-    Y --> AF{是否异步模式?}
-    AF -- 是 --> AG[释放 Redis 临时预占锁]
-    AG --> AH[任务状态置为 succeeded]
-    AF -- 否 --> AA
+    AC --> AD[删除对应 routes 缓存]
+    AD --> AE[返回出票成功]
 ```
 
 ### 说明
 
-- Redis 缓存只负责加速班次查询和削峰控流，不直接决定最终能否买到票。
-- 真正防超卖的关键在 MySQL 事务内的条件更新：只有一个请求能把座位从 `available` 改为 `purchased` 或 `reserved`。
+- Redis 缓存只负责加速班次查询，不直接决定最终能否买到票；Redis 预占锁只做快速分流，也不承担正确性。
+- 真正防超卖的关键在 MySQL 事务内的条件更新：下单时只有一个请求能把座位从 `available` 改为 `reserved`，支付时只有一个请求能把订单从 `pending` 改为 `paid`。
+- 订单过期由 RabbitMQ 延迟消息触发关单，兜底扫描器双保险，关单/支付在数据库层通过 `status='pending'` 条件互斥。
 - 购票成功后删除班次缓存，下一次查询会重新从数据库加载最新余票。
