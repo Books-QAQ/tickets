@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -43,7 +44,8 @@ func (h *CityHandler) ListCities(c *fiber.Ctx) error {
 		})
 	}
 
-	_ = cache.SetJSON(c.Context(), h.redis, citiesCacheKey, cities, 10*time.Minute)
+	// TTL 随机抖动：使基础数据缓存过期时刻错开，避免大量 key 同一瞬间集体失效（防雪崩）
+	_ = cache.SetJSON(c.Context(), h.redis, citiesCacheKey, cities, 10*time.Minute+time.Duration(rand.Intn(60))*time.Second)
 
 	return c.Status(http.StatusOK).JSON(cities)
 }

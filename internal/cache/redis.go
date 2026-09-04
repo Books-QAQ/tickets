@@ -116,6 +116,36 @@ func ReleaseSeatHold(ctx context.Context, client *redis.Client, busID, seatID in
 	return releaseSeatHoldScript.Run(ctx, client, []string{SeatHoldKey(busID, seatID)}, owner).Err()
 }
 
+// releaseLockScript 通用锁释放：value 比对一致才删，防止误删他人锁。
+var releaseLockScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
+// AcquireCacheRebuildLock 抢缓存重建锁：缓存 miss 后多个请求并发回源时，
+// 只放行一个请求查数据库并写缓存，其余请求短暂等待后读新缓存（防缓存击穿）。
+// owner 用随机值，释放时 Lua 比对防止误删他人锁。
+func AcquireCacheRebuildLock(ctx context.Context, client *redis.Client, key, owner string, ttl time.Duration) (bool, error) {
+	if client == nil {
+		return true, nil // Redis 不可用时降级放行，直接回源
+	}
+	ok, err := client.SetNX(ctx, key, owner, ttl).Result()
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
+// ReleaseCacheRebuildLock 释放缓存重建锁（Lua CAS：比对 owner 才删）。
+func ReleaseCacheRebuildLock(ctx context.Context, client *redis.Client, key, owner string) error {
+	if client == nil {
+		return nil
+	}
+	return releaseLockScript.Run(ctx, client, []string{key}, owner).Err()
+}
+
 func AllowFixedWindow(ctx context.Context, client *redis.Client, key string, limit int64, window time.Duration) (bool, time.Duration, error) {
 	if client == nil || limit <= 0 || window <= 0 {
 		return true, 0, nil

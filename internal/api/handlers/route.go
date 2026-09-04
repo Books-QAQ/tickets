@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
@@ -70,6 +72,11 @@ func (h *RouteHandler) SearchRoutes(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid destination terminal"})
 	}
 
+	// 防穿透：出发/到达同一站点必然无线路，直接拒绝，不查缓存也不查库
+	if originTerminalID == destinationTerminalID {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "origin and destination cannot be the same"})
+	}
+
 	departureDate, err := parseDepartureDate(c.Query("departure_time"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -79,6 +86,19 @@ func (h *RouteHandler) SearchRoutes(c *fiber.Ctx) error {
 	cachedRoutes, found, err := cache.GetJSON[[]routeResponse](c.Context(), h.redis, cacheKey)
 	if err == nil && found {
 		return c.Status(http.StatusOK).JSON(cachedRoutes)
+	}
+
+	// 防击穿：缓存 miss 后抢重建锁，只放行一个请求回源 DB 并写缓存；
+	// 其余请求短暂等待后重读缓存，避免热点 key 过期瞬间所有请求同时打 DB。
+	lockKey := cacheKey + ":lock"
+	lockOwner := fmt.Sprintf("%d", time.Now().UnixNano())
+	locked, lerr := cache.AcquireCacheRebuildLock(c.Context(), h.redis, lockKey, lockOwner, 5*time.Second)
+	if lerr == nil && !locked {
+		// 有人在重建：等待 50ms 后重读一次，命中则直接返回
+		time.Sleep(50 * time.Millisecond)
+		if again, ok, _ := cache.GetJSON[[]routeResponse](c.Context(), h.redis, cacheKey); ok {
+			return c.Status(http.StatusOK).JSON(again)
+		}
 	}
 
 	routes, err := h.store.ListRoutes(c.Context(), db.ListRoutesParams{
@@ -129,7 +149,18 @@ func (h *RouteHandler) SearchRoutes(c *fiber.Ctx) error {
 		})
 	}
 
-	_ = cache.SetJSON(c.Context(), h.redis, cacheKey, response, 3*time.Minute)
+	// 防穿透（空值缓存）+ 防雪崩（TTL 随机抖动）：空结果缓存短 TTL，有结果缓存 3min±60s 抖动，
+	// 使大量 key 的过期时刻错开，避免同一瞬间集体失效打爆 DB。
+	if len(response) == 0 {
+		_ = cache.SetJSON(c.Context(), h.redis, cacheKey, response, 30*time.Second)
+	} else {
+		ttl := 3*time.Minute + time.Duration(rand.Intn(60))*time.Second
+		_ = cache.SetJSON(c.Context(), h.redis, cacheKey, response, ttl)
+	}
+	// 释放重建锁（仅当本请求抢到锁时才释放，Lua CAS 防误删他人锁）
+	if lerr == nil && locked {
+		_ = cache.ReleaseCacheRebuildLock(c.Context(), h.redis, lockKey, lockOwner)
+	}
 
 	return c.Status(http.StatusOK).JSON(response)
 }
