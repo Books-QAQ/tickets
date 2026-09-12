@@ -67,6 +67,13 @@ func main() {
 
 	store := db.NewStore(dbConn)
 
+	// 智能AI客服组件（M1）：任一依赖不可用时**降级**而不是启动失败（降级在响应里可见）
+	csComponents, err := api.BuildCSComponents(dbConn, config)
+	if err != nil {
+		log.Error().Err(err).Msg("cannot build AI customer-service components; /internal/* disabled")
+		csComponents = nil
+	}
+
 	redisClient, err := cache.NewRedisClient(config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot connect to redis")
@@ -97,6 +104,7 @@ func main() {
 		log.Fatal().Err(err).Msg("cannot create server")
 	}
 	server.MQ = mq
+	server.WithCS(csComponents)
 
 	// 注入支付渠道：mock（始终可用）+ 支付宝（未配置密钥时降级禁用）
 	mockProvider := payment.NewMockProvider()
