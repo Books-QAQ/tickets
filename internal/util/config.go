@@ -39,6 +39,30 @@ type Config struct {
 	ALIPAYISPRODUCTION          bool   `mapstructure:"ALIPAY_IS_PRODUCTION"`
 	ALIPAYNOTIFYURL             string `mapstructure:"ALIPAY_NOTIFY_URL"`
 	ALIPAYRETURNURL             string `mapstructure:"ALIPAY_RETURN_URL"`
+	// —— 智能AI客服（M1）——
+	InternalKey      string  `mapstructure:"INTERNAL_KEY"`
+	QdrantURL        string  `mapstructure:"QDRANT_URL"`
+	QdrantAPIKey     string  `mapstructure:"QDRANT_API_KEY"`
+	QdrantCollection string  `mapstructure:"QDRANT_COLLECTION"`
+	EmbeddingProvider string `mapstructure:"EMBEDDING_PROVIDER"`
+	EmbeddingBaseURL  string `mapstructure:"EMBEDDING_BASE_URL"`
+	EmbeddingAPIKey   string `mapstructure:"EMBEDDING_API_KEY"`
+	EmbeddingModel    string `mapstructure:"EMBEDDING_MODEL"`
+	EmbeddingDim      int    `mapstructure:"EMBEDDING_DIM"`
+	LLMProvider       string `mapstructure:"LLM_PROVIDER"`
+	LLMBaseURL        string `mapstructure:"LLM_BASE_URL"`
+	LLMAPIKey         string `mapstructure:"LLM_API_KEY"`
+	LLMModel          string `mapstructure:"LLM_MODEL"`
+	LLMMockOperational bool  `mapstructure:"LLM_MOCK_OPERATIONAL"`
+	RerankProvider    string `mapstructure:"RERANK_PROVIDER"`
+	RerankBaseURL     string `mapstructure:"RERANK_BASE_URL"`
+	RerankAPIKey      string `mapstructure:"RERANK_API_KEY"`
+	RerankModel       string `mapstructure:"RERANK_MODEL"`
+	KBPath            string  `mapstructure:"KB_PATH"`
+	ThresholdQA       float64 `mapstructure:"RELEVANCE_THRESHOLD_QA"`
+	ThresholdProse    float64 `mapstructure:"RELEVANCE_THRESHOLD_PROSE"`
+	LiteralThreshold  float64 `mapstructure:"LITERAL_THRESHOLD"`
+	PythonBaseURL     string  `mapstructure:"PYTHON_BASE_URL"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -48,6 +72,19 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv()
+
+	// viper 的 AutomaticEnv 对 Unmarshal 并不可靠：只有配置文件里已存在的 key 才会被填充。
+	// 客服相关配置（M1）要支持"只设环境变量也能生效"，必须显式 BindEnv。
+	for _, key := range []string{
+		"INTERNAL_KEY", "QDRANT_URL", "QDRANT_API_KEY", "QDRANT_COLLECTION",
+		"EMBEDDING_PROVIDER", "EMBEDDING_BASE_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL", "EMBEDDING_DIM",
+		"LLM_PROVIDER", "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_MOCK_OPERATIONAL",
+		"RERANK_PROVIDER", "RERANK_BASE_URL", "RERANK_API_KEY", "RERANK_MODEL",
+		"KB_PATH", "RELEVANCE_THRESHOLD_QA", "RELEVANCE_THRESHOLD_PROSE", "LITERAL_THRESHOLD",
+		"PYTHON_BASE_URL",
+	} {
+		_ = viper.BindEnv(key)
+	}
 
 	err = viper.ReadInConfig()
 	if err != nil {

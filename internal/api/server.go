@@ -21,6 +21,8 @@ type Server struct {
 	App        *fiber.App
 	// PaymentProviders 支付渠道列表（mock / alipay 等），由 main 注入。
 	PaymentProviders []payment.Provider
+	// CS 智能AI客服组件（M1），由 main 注入；为 nil 时不注册 /internal/*。
+	CS *CSComponents
 }
 
 func NewServer(config util.Config, store *db.Store, redisClient *redis.Client) (*Server, error) {

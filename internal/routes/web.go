@@ -44,6 +44,26 @@ func SetupRoutes(server *api.Server) error {
 	server.App.Get("/routes", handlers.NewRouteHandler(server.Store, server.Redis, server.TokenMaker, server.Config).SearchRoutes)
 	server.App.Get("/routes/:route_id/buses/:bus_id/seats", handlers.NewBusHandler(server.Store, server.TokenMaker, server.Config).ListAvailableSeats)
 
+	// —— 智能AI客服：跨语言契约（仅内网 + 内网密钥，§6.1）——
+	// 注意：**必须注册在下面的 authGroup 之前**。Fiber 的 group 中间件作用于其后注册的路由，
+	// 若放在 authGroup（prefix "/" + JWT 校验）之后，/internal/* 会先被 JWT 中间件拦成 401。
+	// 组件装配失败（server.CS == nil）时不注册，避免半残状态被调用。
+	if server.CS != nil && server.CS.KB != nil {
+		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.KB.DB)
+		internal := server.App.Group("/internal", middleware.InternalKeyMiddleware(server.Config.InternalKey))
+		internal.Post("/classify/pre-intent", ih.PreIntent)
+		internal.Post("/classify/rule", ih.ClassifyRule)
+		internal.Post("/retrieve", ih.Retrieve)
+		internal.Post("/tools/route", ih.RouteTool)
+		internal.Post("/tools/:name", ih.ExecTool)
+		internal.Post("/citation/verify", ih.VerifyCitation)
+		internal.Post("/support-tickets", ih.CreateSupportTicket)
+		internal.Post("/session/turns", ih.RecordTurns)
+		internal.Post("/metrics", ih.RecordMetrics)
+		internal.Get("/metrics/snapshot", ih.MetricsSnapshot)
+		internal.Post("/v1/chat/completions", ih.ChatCompletions)
+	}
+
 	authGroup := server.App.Group("/", middleware.AuthMiddleware(server.TokenMaker))
 	authGroup.Get("/user/info", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).GetUserProfile)
 	authGroup.Put("/user/update", handlers.NewUserHandler(server.Store, server.Redis, server.TokenMaker, server.Config).UpdateUserProfile)
