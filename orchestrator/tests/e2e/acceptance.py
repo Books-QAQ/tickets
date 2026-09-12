@@ -93,16 +93,21 @@ def main() -> int:
                 got = "answer"
 
             expect = case["expect"]
-            ok = got == expect
-            # 允许"知识库没内容"时降级为转人工（诚实：没依据不硬答）
-            if expect == "answer" and got == "transfer":
-                ok = True
-                note = "内容缺口→转人工"
-            elif expect == "transfer" and got == "answer":
-                ok = bool(case.get("boundary")) or case.get("allow_answer", False)
-                note = "转人工预期但答了"
+            if expect == "greet":
+                # greet 分支的判据是"给了问候话术且没有走检索/生成"
+                ok = got == "answer" and "智能客服" in answer
+                note = "" if ok else "未命中 greet 话术"
             else:
-                note = ""
+                ok = got == expect
+                # 允许"知识库没内容"时降级为转人工（诚实：没依据不硬答）
+                if expect == "answer" and got == "transfer":
+                    ok = True
+                    note = "内容缺口→转人工"
+                elif expect == "transfer" and got == "answer":
+                    ok = bool(case.get("boundary")) or case.get("allow_answer", False)
+                    note = "转人工预期但答了"
+                else:
+                    note = ""
 
             if case.get("boundary") and got == "answer":
                 if not out.get("boundary_injected"):
