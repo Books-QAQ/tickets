@@ -42,14 +42,15 @@ items:
   - sub_scenario: waitlist
     category: booking
     status: roadmap
-    target: "M5-3（候补队列 + 状态机 + 与座位释放联动）"
+    target: "M5-3"
     source: "12306 候补购票规则"
-    note: "本平台无候补功能；答案必须先声明边界，用户要求办理时走 capability_absent 转人工"
+    note: "本平台无候补功能；答案必须先声明边界，用户要求办理时走 capability_absent 转人工 ｜ 落地要点：候补队列 + 状态机 + 与座位释放联动"
   - sub_scenario: connecting_ticket
     category: booking
     status: roadmap
-    target: "M5-3（routes 图化 + 分段计价）"
+    target: "M5-3"
     source: "联程/接续票办理规则"
+    note: "落地要点：routes 图化 + 分段计价"
   - sub_scenario: train_adjust
     category: booking
     status: industry
@@ -74,13 +75,14 @@ items:
   - sub_scenario: invoice
     category: order
     status: roadmap
-    target: "M5-2（invoices 表 + 支付宝开票）"
+    target: "M5-2"
     source: "铁路电子发票/报销凭证规则"
+    note: "落地要点：invoices 表 + 支付宝开票"
   - sub_scenario: notify
     category: order
     status: roadmap
-    target: "M5-2（通知通道）"
-    note: "本平台无短信/推送通道"
+    target: "M5-2"
+    note: "本平台无短信/推送通道 ｜ 落地要点：通知通道"
 
 # ============ refund 退票改签 ============
   - sub_scenario: refund_fee
@@ -106,16 +108,17 @@ items:
   - sub_scenario: change_ticket
     category: refund
     status: roadmap
-    target: "M5-3（改签：订单模型改造）"
+    target: "M5-3"
     source: "《铁路旅客运输规程》改签条款"
-    note: "本平台无改签表，当前只能讲规则 + 转人工"
+    note: "本平台无改签表，当前只能讲规则 + 转人工 ｜ 落地要点：改签：订单模型改造"
   - sub_scenario: change_station
     category: refund
     status: roadmap
-    target: "M5-3（变更到站）"
+    target: "M5-3"
     source: "变更到站办理规则"
 
 # ============ account 账号与身份 ============
+    note: "落地要点：变更到站"
   - sub_scenario: account_auth
     category: account
     status: supported
@@ -128,23 +131,27 @@ items:
   - sub_scenario: identity_verify
     category: account
     status: roadmap
-    target: "M5-1（users 加证件与核验状态）"
+    target: "M5-1"
     source: "铁路实名制核验规则"
+    note: "落地要点：users 加证件与核验状态"
   - sub_scenario: contacts
     category: account
     status: roadmap
-    target: "M5-1（contacts 表 + CRUD）"
+    target: "M5-1"
+    note: "落地要点：contacts 表 + CRUD"
   - sub_scenario: id_document
     category: account
     status: roadmap
-    target: "M5-1（证件类型与有效期）"
+    target: "M5-1"
     source: "护照/港澳台证件购票规定"
+    note: "落地要点：证件类型与有效期"
   - sub_scenario: contact_binding
     category: account
     status: roadmap
-    target: "M5-1（手机号 / 邮箱绑定）"
+    target: "M5-1"
 
 # ============ travel 乘车与车站服务 ============
+    note: "落地要点：手机号 / 邮箱绑定"
   - sub_scenario: checkin_rule
     category: travel
     status: supported
@@ -158,9 +165,9 @@ items:
   - sub_scenario: lost_item
     category: travel
     status: roadmap
-    target: "M5-2（lost_items 表 + 与 support_tickets 联动）"
+    target: "M5-2"
     source: "车站遗失物品登记与查找办法"
-    note: "本平台无失物登记；当前只能讲行业流程 + 转人工"
+    note: "本平台无失物登记；当前只能讲行业流程 + 转人工 ｜ 落地要点：lost_items 表 + 与 support_tickets 联动"
   - sub_scenario: luggage
     category: travel
     status: industry
@@ -219,5 +226,7 @@ items:
   - sub_scenario: member_points
     category: policy
     status: roadmap
-    target: "M5-3（points 表与订单联动）"
+    target: "M5-3"
     source: "铁路常旅客会员积分规则"
+
+    note: "落地要点：points 表与订单联动"
