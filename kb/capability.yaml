@@ -1,0 +1,223 @@
+# 能力台账（技术设计文档 §7.9）
+#
+# 本文件是 sub_scenario 能力的【单一事实来源】：
+#   status: supported  本平台已实现（可给入口与操作路径）；必须填 system_entry
+#   status: roadmap    计划落地（先写行业规则，措辞加边界声明 + 承诺转人工）；必须填 target
+#   status: industry   行业通行/本平台无计划（只作行业参考）；必须填 source
+#
+# 入库时快照进 kb_chunks.capability 与 Qdrant payload；
+# 状态翻转只更新 payload（kb-sync --refresh-capability），【不重嵌、不动向量】。
+#
+# 格式约定（供 kb/_lint.py 零依赖解析）：扁平 block style，不要嵌套、不要行内注释。
+
+version: 1
+updated_at: 2026-09-12
+owner: 产品/客服负责人（见文档 19.15）
+
+# ============ booking 车票预订 ============
+items:
+  - sub_scenario: purchase_flow
+    category: booking
+    status: supported
+    system_entry: "前端 /booking；GET /routes、GET /routes/:route_id/buses/:bus_id/seats、POST /orders"
+  - sub_scenario: seat_selection
+    category: booking
+    status: supported
+    system_entry: "GET /routes/:route_id/buses/:bus_id/seats（座位号）"
+    note: "只有 bus_seats.seat_number 与 buses.bus_type/is_vip；无席别（一等/二等/卧铺）体系"
+  - sub_scenario: limit_sale
+    category: booking
+    status: supported
+    system_entry: "buses.sale_open_at（未到开售时间返回 403）"
+    note: "仅能答开售时间；无区间限售规则"
+  - sub_scenario: special_ticket
+    category: booking
+    status: industry
+    source: "《铁路旅客运输规程》学生票/儿童票/残疾军人票条款"
+    note: "本平台无票种与优惠字段，属行业知识；不得讲成本平台可购"
+  - sub_scenario: group_ticket
+    category: booking
+    status: industry
+    source: "车站团体票办理公告"
+  - sub_scenario: waitlist
+    category: booking
+    status: roadmap
+    target: "M5-3（候补队列 + 状态机 + 与座位释放联动）"
+    source: "12306 候补购票规则"
+    note: "本平台无候补功能；答案必须先声明边界，用户要求办理时走 capability_absent 转人工"
+  - sub_scenario: connecting_ticket
+    category: booking
+    status: roadmap
+    target: "M5-3（routes 图化 + 分段计价）"
+    source: "联程/接续票办理规则"
+  - sub_scenario: train_adjust
+    category: booking
+    status: industry
+    source: "车站临时调整公告"
+    note: "本平台无晚点/停运事件字段"
+
+# ============ order 订单与支付 ============
+  - sub_scenario: order_query
+    category: order
+    status: supported
+    system_entry: "GET /orders/:orderNo、GET /orders/:orderNo/status、GET /user/tickets"
+  - sub_scenario: pay_issue
+    category: order
+    status: supported
+    system_entry: "POST /orders/:orderNo/pay、POST /pay/alipay/notify（幂等）"
+    note: "可解释扣款成功无订单（补出票/退款兜底）与重复扣款（条件更新幂等）；渠道侧对账无接口"
+  - sub_scenario: pay_method
+    category: order
+    status: supported
+    system_entry: "POST /orders/:orderNo/pay（channel=mock|alipay）"
+    note: "仅 mock 与支付宝（沙箱）；微信等未接入，必须如实说明"
+  - sub_scenario: invoice
+    category: order
+    status: roadmap
+    target: "M5-2（invoices 表 + 支付宝开票）"
+    source: "铁路电子发票/报销凭证规则"
+  - sub_scenario: notify
+    category: order
+    status: roadmap
+    target: "M5-2（通知通道）"
+    note: "本平台无短信/推送通道"
+
+# ============ refund 退票改签 ============
+  - sub_scenario: refund_fee
+    category: refund
+    status: supported
+    system_entry: "工具 refund_fee（penalties 阶梯规则 + 确定性计算）；DELETE /tickets/:id"
+    note: "penalties 规则行语义待确认（文档 19.2）；确认不了则工具下线，退票费只讲规则并转人工"
+  - sub_scenario: refund_arrival
+    category: refund
+    status: supported
+    system_entry: "orders.status=refunded、pay_channel"
+    note: "只有本地状态；渠道侧无退款查询接口"
+  - sub_scenario: partial_refund
+    category: refund
+    status: supported
+    system_entry: "orders（单座位单订单：多人=多订单）"
+    note: "无部分退票概念，需按多订单解释"
+  - sub_scenario: cancel_service_policy
+    category: refund
+    status: supported
+    system_entry: "知识库政策文本（无事件字段）"
+    note: "停运/晚点情形下的退改政策仅作文本说明，不承诺平台自动处理"
+  - sub_scenario: change_ticket
+    category: refund
+    status: roadmap
+    target: "M5-3（改签：订单模型改造）"
+    source: "《铁路旅客运输规程》改签条款"
+    note: "本平台无改签表，当前只能讲规则 + 转人工"
+  - sub_scenario: change_station
+    category: refund
+    status: roadmap
+    target: "M5-3（变更到站）"
+    source: "变更到站办理规则"
+
+# ============ account 账号与身份 ============
+  - sub_scenario: account_auth
+    category: account
+    status: supported
+    system_entry: "POST /register、POST /login、PUT /user/password_change、POST /tokens/renew_access"
+  - sub_scenario: account_locked
+    category: account
+    status: supported
+    system_entry: "sessions.is_blocked；登录限流（rate:login:*）返回 429"
+    note: "有 blocked 字段与限流，无风控体系"
+  - sub_scenario: identity_verify
+    category: account
+    status: roadmap
+    target: "M5-1（users 加证件与核验状态）"
+    source: "铁路实名制核验规则"
+  - sub_scenario: contacts
+    category: account
+    status: roadmap
+    target: "M5-1（contacts 表 + CRUD）"
+  - sub_scenario: id_document
+    category: account
+    status: roadmap
+    target: "M5-1（证件类型与有效期）"
+    source: "护照/港澳台证件购票规定"
+  - sub_scenario: contact_binding
+    category: account
+    status: roadmap
+    target: "M5-1（手机号 / 邮箱绑定）"
+
+# ============ travel 乘车与车站服务 ============
+  - sub_scenario: checkin_rule
+    category: travel
+    status: supported
+    system_entry: "知识库规则 + 订单/座位号（orders、bus_seats.seat_number）"
+    note: "无检票实体；只能讲凭订单与座号乘车"
+  - sub_scenario: transfer_wait
+    category: travel
+    status: supported
+    system_entry: "terminals、cities、routes（点位与换乘关系）"
+    note: "仅有站点与线路数据"
+  - sub_scenario: lost_item
+    category: travel
+    status: roadmap
+    target: "M5-2（lost_items 表 + 与 support_tickets 联动）"
+    source: "车站遗失物品登记与查找办法"
+    note: "本平台无失物登记；当前只能讲行业流程 + 转人工"
+  - sub_scenario: luggage
+    category: travel
+    status: industry
+    source: "《铁路旅客运输规程》行李与违禁品条款"
+  - sub_scenario: child_elder
+    category: travel
+    status: industry
+    source: "儿童与重点旅客乘车规定"
+  - sub_scenario: pet
+    category: travel
+    status: industry
+    source: "铁路宠物运输（押运）规定"
+  - sub_scenario: priority_service
+    category: travel
+    status: industry
+    source: "重点旅客（轮椅/担架/爱心服务）预约办法"
+  - sub_scenario: delay_notice
+    category: travel
+    status: industry
+    source: "车站晚点/停运公告"
+    note: "本平台无晚点停运事件源"
+
+# ============ app 系统与技术问题 ============
+  - sub_scenario: page_error
+    category: app
+    status: supported
+    system_entry: "真实错误码：401（未登录/令牌失效）、403（越权/未开售）、409（座位被占/订单冲突）、429（限流）"
+  - sub_scenario: browser_cache
+    category: app
+    status: supported
+    system_entry: "静态资源 no-cache 策略（/、/login、/booking 等）"
+    note: "本项目为 Web，无 APP；下载/版本类问题应改写为浏览器兼容与缓存问题"
+  - sub_scenario: captcha
+    category: app
+    status: industry
+    note: "本平台无验证码机制"
+  - sub_scenario: push_issue
+    category: app
+    status: industry
+    note: "本平台无推送通道"
+
+# ============ policy 投诉与政策 ============
+  - sub_scenario: complaint_channel
+    category: policy
+    status: supported
+    system_entry: "support_tickets（POST /cs/support-tickets；投诉行为走前置意图直接转人工）"
+  - sub_scenario: activity_rule
+    category: policy
+    status: supported
+    system_entry: "知识库 notice（buses.price / 优惠信息）"
+    note: "无活动实体，仅有票价与公告类信息"
+  - sub_scenario: policy_notice
+    category: policy
+    status: supported
+    system_entry: "知识库 notice + expire_at（过期自动退出检索）"
+  - sub_scenario: member_points
+    category: policy
+    status: roadmap
+    target: "M5-3（points 表与订单联动）"
+    source: "铁路常旅客会员积分规则"
