@@ -1,3 +1,9 @@
 Makefile
 .idea
 tmp
+
+# Python 编排层（M0 起）
+orchestrator/.venv/
+__pycache__/
+*.pyc
+orchestrator/spike/_m0a_probe.log

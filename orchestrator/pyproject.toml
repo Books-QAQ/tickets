@@ -1,0 +1,35 @@
+[project]
+name = "tickets-cs-orchestrator"
+version = "0.0.0"
+description = "tickets 智能AI客服 · Python 应用编排层（LangGraph）—— 依赖组合由 M0 spike 实测锁定"
+requires-python = ">=3.11"
+
+dependencies = [
+    # ---- 图编排与持久化（M0-A 实测对象）----
+    "langgraph==1.2.11",
+    "langchain-core>=1.4.7",
+    "langchain-openai>=1.0",
+    "langgraph-checkpoint==4.2.0",
+    "langgraph-checkpoint-mysql[aiomysql]==3.0.0",
+    "aiomysql>=0.3",
+    # MySQL 8 默认认证插件 caching_sha2_password 在非 TLS 连接下需要它
+    # （M0-A 实测：缺它会直接 RuntimeError 连不上库，见 M0 报告）
+    "cryptography>=42",
+    # ---- HTTP 服务与流式（M1 使用）----
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=3.4",
+    "httpx>=0.27",
+    # ---- 向量检索（M0-B 实测 + M1 使用）----
+    "qdrant-client>=1.12",
+    "numpy>=1.26",
+    # ---- 杂项 ----
+    "pydantic>=2.7.4",
+    "orjson",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.uv]
+package = false
