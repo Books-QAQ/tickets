@@ -76,6 +76,9 @@ type Result struct {
 	Facts     map[string]any `json:"facts,omitempty"`      // 结构化事实（供模板直答/统计）
 	Missing   []string       `json:"missing,omitempty"`    // 槽位不全时的缺口
 	Candidates []string      `json:"candidates,omitempty"` // 歧义候选
+	// OptionValues 与 Candidates 同序的**机器可用值**（未脱敏）：
+	// 展示给用户的是脱敏文本，但 resume 后要拿它回填槽位（多张票/多笔订单消歧用）
+	OptionValues []string `json:"option_values,omitempty"`
 	Reason    string         `json:"reason,omitempty"`     // 非 ok 时的机制级原因（可观测）
 	// PathHint 转人工路径提示（§10.1 四路径；编排层据此落 path 字段，不用自己猜）：
 	// transfer_tool_unavailable（工具坏/闸门关）| transfer_deterministic（业务规则，如误车）

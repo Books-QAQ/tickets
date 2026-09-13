@@ -43,14 +43,29 @@ func SetupRoutes(server *api.Server) error {
 	server.App.Get("/terminals", handlers.NewTerminalHandler(server.Store, server.Redis, server.TokenMaker, server.Config).ListTerminals)
 	server.App.Get("/routes", handlers.NewRouteHandler(server.Store, server.Redis, server.TokenMaker, server.Config).SearchRoutes)
 	server.App.Get("/routes/:route_id/buses/:bus_id/seats", handlers.NewBusHandler(server.Store, server.TokenMaker, server.Config).ListAvailableSeats)
+	// —— 智能AI客服：公网入口（§12.1）——
+	// 同样**必须在 authGroup 之前注册**：/cs/ask 允许游客使用（JWT 可选），
+	// 放到 authGroup 之后会被 JWT 中间件拦成 401（M1 已在 /internal/* 上踩过一次）。
+	// 身份解析在 handler 内做：有 Bearer 就解析，没有就是游客（device_id 只存 hash）。
+	var csAux handlers.Counter
+	if server.CS != nil {
+		csAux = server.CS.Aux
+	}
+	csHandler := handlers.NewCSHandler(server.Store, server.Redis, server.TokenMaker, server.Config, csAux)
+	server.App.Post("/cs/ask", csHandler.Ask)
+	server.App.Delete("/cs/session", csHandler.DeleteSession)
+	server.App.Post("/cs/feedback", csHandler.PostFeedback)
+	server.App.Post("/cs/support-tickets", csHandler.PostSupportTicket)
 
 	// —— 智能AI客服：跨语言契约（仅内网 + 内网密钥，§6.1）——
 	// 注意：**必须注册在下面的 authGroup 之前**。Fiber 的 group 中间件作用于其后注册的路由，
 	// 若放在 authGroup（prefix "/" + JWT 校验）之后，/internal/* 会先被 JWT 中间件拦成 401。
 	// 组件装配失败（server.CS == nil）时不注册，避免半残状态被调用。
 	if server.CS != nil && server.CS.KB != nil {
-		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.Tools, server.CS.KB.DB)
+		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.Tools, server.CS.Cache, server.CS.KB.DB)
 		internal := server.App.Group("/internal", middleware.InternalKeyMiddleware(server.Config.InternalKey))
+		internal.Post("/cache/lookup", ih.CacheLookup)
+		internal.Post("/cache/store", ih.CacheStore)
 		internal.Post("/classify/pre-intent", ih.PreIntent)
 		internal.Post("/classify/rule", ih.ClassifyRule)
 		internal.Post("/retrieve", ih.Retrieve)
@@ -75,7 +90,9 @@ func SetupRoutes(server *api.Server) error {
 	authGroup.Get("/orders/:orderNo/status", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).GetOrderStatus)
 	authGroup.Delete("/tickets/:id", handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).CancelTicket)
 
-	// 智能AI客服：用户查自己的工单（§10.4 V1 范围；user_id 只来自服务端 JWT 解析）
-	authGroup.Get("/cs/support-tickets", handlers.NewCSHandler(server.Store).ListSupportTickets)
+	// 智能AI客服：用户查自己的工单与会话（§10.4 / §12.1；user_id 只来自服务端 JWT 解析）
+	authGroup.Get("/cs/support-tickets", csHandler.ListSupportTickets)
+	authGroup.Get("/cs/conversations", csHandler.ListConversations)
+	authGroup.Get("/cs/conversations/:id/messages", csHandler.ListMessages)
 	return nil
 }

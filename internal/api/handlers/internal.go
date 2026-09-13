@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/Books-QAQ/tickets/internal/ai/answercache"
 	"github.com/Books-QAQ/tickets/internal/ai/cite"
 	"github.com/Books-QAQ/tickets/internal/ai/classify"
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
@@ -25,12 +26,60 @@ type InternalHandler struct {
 	LLM       llm.Provider
 	Aux       *kb.Aux
 	Tools     *tools.Registry
+	Cache     *answercache.Cache
 	DB        *sql.DB
 }
 
 func NewInternalHandler(store *kb.Store, retriever *kb.Retriever, provider llm.Provider, aux *kb.Aux,
-	reg *tools.Registry, db *sql.DB) *InternalHandler {
-	return &InternalHandler{Store: store, Retriever: retriever, LLM: provider, Aux: aux, Tools: reg, DB: db}
+	reg *tools.Registry, cache *answercache.Cache, db *sql.DB) *InternalHandler {
+	return &InternalHandler{Store: store, Retriever: retriever, LLM: provider, Aux: aux,
+		Tools: reg, Cache: cache, DB: db}
+}
+
+// ---------- M3：答案缓存（§9.3，查/存都在图内节点发起）----------
+
+type cacheLookupReq struct {
+	Question string `json:"question"`
+	Category string `json:"category"`
+}
+
+// POST /internal/cache/lookup
+func (h *InternalHandler) CacheLookup(c *fiber.Ctx) error {
+	var req cacheLookupReq
+	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Question) == "" {
+		return errKind(c, fiber.StatusBadRequest, "invalid_input", "question 不能为空")
+	}
+	if h.Cache == nil {
+		// 缓存未装配：明确说“没启用”，不要让它看起来像“没命中”（口径要能区分）
+		return c.JSON(fiber.Map{"hit": false, "vector_mode": "disabled"})
+	}
+	res := h.Cache.Lookup(c.Context(), req.Question, req.Category)
+	return c.JSON(fiber.Map{
+		"hit": res.Hit, "answer": res.Answer, "sources": res.Sources,
+		"score": res.Score, "vector_mode": res.VectorMode,
+	})
+}
+
+type cacheStoreReq struct {
+	Question     string                   `json:"question"`
+	Category     string                   `json:"category"`
+	Answer       string                   `json:"answer"`
+	Sources      []answercache.SourceRef  `json:"sources"`
+	Personalized bool                     `json:"personalized"` // 含订单号/工具直答 → 拒绝入缓存
+}
+
+// POST /internal/cache/store
+func (h *InternalHandler) CacheStore(c *fiber.Ctx) error {
+	var req cacheStoreReq
+	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Question) == "" {
+		return errKind(c, fiber.StatusBadRequest, "invalid_input", "question 不能为空")
+	}
+	if h.Cache == nil {
+		return c.JSON(fiber.Map{"stored": false, "reason": "disabled"})
+	}
+	res := h.Cache.Store(c.Context(), req.Question, req.Category, req.Answer, req.Sources, req.Personalized)
+	return c.JSON(fiber.Map{"stored": res.Stored, "promoted": res.Promoted,
+		"evicted": res.Evicted, "reason": res.Reason})
 }
 
 // errKind 统一错误信封 {error:{kind,message}}（§6.1：编排层据 kind 决策，不解析文案）

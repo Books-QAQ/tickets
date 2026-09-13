@@ -308,3 +308,33 @@ func TestRefundFeeGatedByDefault(t *testing.T) {
 		t.Errorf("应给出转人工路径提示，得到 %q", res.PathHint)
 	}
 }
+
+// TestGateClosedDoesNotTripBreaker 锁定 M3 实测的真口径 bug：
+// **闸门关闭（确定性拒绝）不能计入熔断**。否则连问同一条未确认规则会把熔断打开，
+// 之后返回的原因从 penalty_semantics_unconfirmed 漂成 circuit_open，
+// 坐席在工单里看到的判定原因失真（M2 的 D1 用例因此翻红）。
+func TestGateClosedDoesNotTripBreaker(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.PenaltySemanticsConfirmed = false // 闸门关闭
+	cnt := &counters{}
+	r := BuildRegistry(Deps{Cfg: cfg, Cnt: cnt})
+
+	slot := SlotSet{TicketID: 1}
+	for i := 0; i < 10; i++ { // 连问 10 次，远超熔断阈值 3
+		res := r.RunNamed(context.Background(), "refund_fee", Identity{UserID: 1}, slot)
+		if res.Kind != KindUnavailable {
+			t.Fatalf("第 %d 次应为 unavailable，得到 %s", i+1, res.Kind)
+		}
+		if res.Reason != "penalty_semantics_unconfirmed" {
+			t.Fatalf("第 %d 次原因被污染：%s（熔断不该被确定性拒绝触发）", i+1, res.Reason)
+		}
+	}
+	if cnt.get("tool_circuit_open_total") != 0 {
+		t.Fatalf("确定性拒绝累计后熔断被打开：circuit_open=%d", cnt.get("tool_circuit_open_total"))
+	}
+	if cnt.get("tool_gate_closed_total") != 10 {
+		t.Fatalf("闸门关闭应单独计数 tool_gate_closed_total=10，实际 %d", cnt.get("tool_gate_closed_total"))
+	}
+	t.Logf("10 次闸门关闭：circuit_open=0、gate_closed=%d、unavailable=%d",
+		cnt.get("tool_gate_closed_total"), cnt.get("tool_unavailable_total"))
+}

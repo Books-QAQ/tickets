@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
+	"github.com/Books-QAQ/tickets/internal/ai/answercache"
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
 	"github.com/Books-QAQ/tickets/internal/ai/llm"
 	"github.com/Books-QAQ/tickets/internal/ai/tools"
@@ -16,7 +19,7 @@ import (
 )
 
 // CSComponents 智能AI客服的 Go 侧能力组件
-// （M1：检索 + 分类 + 引用校验 + LLM 网关；M2：工具层）
+// （M1：检索 + 分类 + 引用校验 + LLM 网关；M2：工具层；M3：答案缓存）
 type CSComponents struct {
 	KB          *kb.Store
 	Retriever   *kb.Retriever
@@ -24,7 +27,25 @@ type CSComponents struct {
 	Aux         *kb.Aux
 	Index       *kb.Index
 	Tools       *tools.Registry
+	Cache       *answercache.Cache
 	LLMDegraded bool // true = 走的是 mock provider（degraded.llm）
+}
+
+// embAdapter 把 kb.Embedder（批量签名 Embed(ctx, []string)）适配成 answercache 需要的单条签名。
+// 适配器只有一层、不做重试/缓存（embedding 缓存由 kb 侧负责），避免两处口径。
+type embAdapter struct{ e kb.Embedder }
+
+func (a embAdapter) Semantic() bool { return a.e.Semantic() }
+
+func (a embAdapter) Embed(ctx context.Context, text string) ([]float32, error) {
+	vecs, err := a.e.Embed(ctx, []string{text})
+	if err != nil {
+		return nil, err
+	}
+	if len(vecs) == 0 {
+		return nil, nil
+	}
+	return vecs[0], nil
 }
 
 // WithCS 注入客服组件
@@ -39,7 +60,8 @@ func (server *Server) WithCS(cs *CSComponents) *Server {
 //   - 未配置真实 embedding → 用 FakeEmbedder（词面哈希）并让检索结果标 vector_mode=ngram + degraded.vector=true
 //   - 未配置真实 LLM → 用 mock provider，并在响应里标 degraded.llm=true
 //   - Qdrant 不可达 → 向量路关闭（字面替身），BM25 仍可服务
-func BuildCSComponents(dbConn *sql.DB, cfg util.Config) (*CSComponents, error) {
+//   - M3：Redis 不可用/未配置 → 答案缓存整体禁用（永不相中，并在响应里标 vector_mode=disabled）
+func BuildCSComponents(dbConn *sql.DB, redisClient *redis.Client, cfg util.Config) (*CSComponents, error) {
 	ctx := context.Background()
 	store := kb.NewStore(dbConn)
 	aux := kb.NewAux()
@@ -145,7 +167,31 @@ func BuildCSComponents(dbConn *sql.DB, cfg util.Config) (*CSComponents, error) {
 	if !toolCfg.PenaltySemanticsConfirmed {
 		log.Warn().Msg("退票费工具闸门未开启（19.2 penalties 语义未确认）→ refund_fee 不下结论，走 FAQ + 转人工")
 	}
+	// PYTHON_BASE_URL 没配 = 每个 /cs/ask 都会走降级建单。
+	// M3 实测踩过：M2 的验收一直**直接打编排层**，所以"Go→编排层"这条路从没被跑过，
+	// 配漏了也看不出来，表现是"用户问什么都回工单号"。这种静默降级必须在启动日志里报错。
+	if strings.TrimSpace(cfg.PythonBaseURL) == "" {
+		log.Error().Msg("PYTHON_BASE_URL 未配置：/cs/ask 无法访问编排层，**每一轮都会降级为直接建单**（用户只会拿到工单号）")
+	} else {
+		log.Info().Str("python_base_url", cfg.PythonBaseURL).Msg("编排层入口已配置")
+	}
+
+	// —— M3：答案级语义缓存（§9.3）——
+	// 复用检索用的同一个 embedder：缓存匹配阈值 0.95 比检索阈值 0.60 高得多，
+	// 且**词面替身时必须诚实标注**（ngram 下"同义改写"匹配不成立，只对字面近同的问题有效）。
+	acCfg := answercache.DefaultConfig()
+	if acCfg.TTL <= 0 {
+		acCfg.TTL = 24 * time.Hour
+	}
+	var acStore answercache.Store
+	if redisClient != nil {
+		acStore = answercache.RedisStore{Client: redisClient}
+	}
+	answerCache := answercache.New(acStore, embAdapter{emb}, acCfg, aux)
+	if redisClient == nil {
+		log.Warn().Msg("Redis 未就绪：答案缓存整体禁用（响应里 vector_mode=disabled，不是静默降级）")
+	}
 
 	return &CSComponents{KB: store, Retriever: retriever, LLM: provider, Aux: aux, Index: index,
-		Tools: toolRegistry, LLMDegraded: llmDegraded}, nil
+		Tools: toolRegistry, Cache: answerCache, LLMDegraded: llmDegraded}, nil
 }

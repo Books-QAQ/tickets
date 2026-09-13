@@ -135,6 +135,15 @@ func (r *Registry) Route(question string, category string) []Candidate {
 	return out
 }
 
+// deterministicUnavailable 「确定性拒绝」的原因集合：**不计入熔断**。
+// 判据：这个结果换了任何时候、任何人都一样，且重试一万次也不会变——
+// 那就不是"工具坏了"，而是"业务上不下结论"。
+var deterministicUnavailable = map[string]bool{
+	"penalty_semantics_unconfirmed": true, // 19.2 闸门关闭（宁可转人工不猜金额）
+	"policy_not_confirmed":          true,
+	"guest_not_allowed":             true,
+}
+
 // RunNamed 按名执行（编排层选定后的执行入口）。
 // 统一包裹：熔断 → 身份校验（游客）→ 超时 → 计数。**工具不可用单独计数**（§10.1 路径④）。
 func (r *Registry) RunNamed(ctx context.Context, name string, id Identity, s SlotSet) Result {
@@ -165,8 +174,17 @@ func (r *Registry) RunNamed(ctx context.Context, name string, id Identity, s Slo
 		res.Reason = "tool_timeout"
 		res.Degraded = true
 	case res.Kind == KindUnavailable:
-		r.br.fail(name) // 数据源异常/闸门关闭/熔断 → 计入失败
-		r.deps.inc("tool_unavailable_total")
+		// **确定性拒绝不计入熔断**：闸门未确认/合规不允许属于"业务上不下结论"，不是工具故障。
+		// 计进去的后果（M3 实测踩过）：高频问同一条未确认规则 → 熔断被打开 →
+		// 同一工具返回的原因从 `penalty_semantics_unconfirmed` 漂成 `circuit_open`，
+		// 坐席在工单里看到的判定原因失真，M2 的 D1 用例因此翻红。
+		if deterministicUnavailable[res.Reason] {
+			r.deps.inc("tool_gate_closed_total")
+			r.deps.inc("tool_unavailable_total") // 口径不变：确实没给出结论
+		} else {
+			r.br.fail(name)
+			r.deps.inc("tool_unavailable_total")
+		}
 	default:
 		r.br.success(name)
 		r.deps.inc("tool_calls_total")

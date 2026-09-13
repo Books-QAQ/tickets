@@ -172,15 +172,18 @@ func (t orderDetailTool) Exec(ctx context.Context, id Identity, s SlotSet) Resul
 		return t.resultFor(orders[0])
 	default:
 		opts := make([]string, 0, len(orders))
+		vals := make([]string, 0, len(orders))
 		for _, o := range orders {
 			opts = append(opts, fmt.Sprintf("%s（%d元 %s）", MaskOrderNo(o.OrderNo), o.Amount, orderStatusText(o.Status)))
+			vals = append(vals, o.OrderNo) // 机器可用值：resume 后回填槽位
 		}
 		return Result{
-			Kind:       KindSlotsIncomplete,
-			Reason:     "multiple_recent_orders",
-			Missing:    []string{"订单号"},
-			Candidates: opts,
-			Summary:    "您最近有多笔订单，请告诉我要查哪一笔（可直接回复订单号）。",
+			Kind:         KindSlotsIncomplete,
+			Reason:       "multiple_recent_orders",
+			Missing:      []string{"订单号"},
+			Candidates:   opts,
+			OptionValues: vals,
+			Summary:      "您最近有多笔订单，请告诉我要查哪一笔（可直接回复序号）。",
 		}
 	}
 }

@@ -258,13 +258,15 @@ func (t refundFeeTool) locateTicket(ctx context.Context, id Identity, s SlotSet)
 		return refundTarget{BusID: c.BusID, Amount: c.Price, Status: c.Status, TicketID: c.UserTicketID}, Result{}, true
 	default:
 		opts := make([]string, 0, len(cands))
+		vals := make([]string, 0, len(cands))
 		for _, c := range cands {
 			opts = append(opts, fmt.Sprintf("车票%d（%s %s→%s）", c.UserTicketID, c.DepartureTime.Format("01-02 15:04"), c.OriginTerminal, c.DestinationTerm))
+			vals = append(vals, fmt.Sprintf("车票%d", c.UserTicketID))
 		}
 		return refundTarget{}, Result{
 			Kind: KindSlotsIncomplete, Reason: "multiple_refundable_tickets",
-			Missing: []string{"车票号"}, Candidates: opts,
-			Summary: "您有多张可退车票，请告诉我要算哪一张：" + fmt.Sprintf("%v", opts),
+			Missing: []string{"车票号"}, Candidates: opts, OptionValues: vals,
+			Summary: "您有多张可退车票，请告诉我要算哪一张（可直接回复序号）。",
 		}, false
 	}
 }

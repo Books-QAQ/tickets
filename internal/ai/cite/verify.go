@@ -78,8 +78,14 @@ func Verify(answer string, allowed map[string]kb.Chunk) VerifyResult {
 		res.AnswerCleaned, _ = stripOperationalSentences(res.AnswerCleaned)
 	}
 	if res.NeedsBoundary {
-		res.AnswerCleaned = BoundaryPrefix + "\n\n" + strings.TrimSpace(res.AnswerCleaned)
-		res.BoundaryInjected = true
+		// **幂等**：缓存命中的答案在入库前已经带过声明，这里不能再拼一遍
+		// （M3：命中也要过 verify，若不复用判断会出现两段"该功能本平台暂未开放"）
+		if strings.HasPrefix(strings.TrimSpace(res.AnswerCleaned), BoundaryPrefix) {
+			res.BoundaryInjected = true // 语义 = 最终答案带边界声明
+		} else {
+			res.AnswerCleaned = BoundaryPrefix + "\n\n" + strings.TrimSpace(res.AnswerCleaned)
+			res.BoundaryInjected = true
+		}
 	}
 	return res
 }
