@@ -35,6 +35,16 @@ def build_tool_pick_prompt(question: str, tools: list[dict]) -> str:
     return "可用工具：\n" + "\n".join(lines) + f"\n\n用户问题：{question}\n\n工具名："
 
 
+# —— M3：E11 检索空时的改写重试 ——
+# 只改写、不回答：答案仍走生成层的防幻觉约束，避免模型在缺素材时编造。
+# 必须带会话上下文才允许改写（无历史时 LLM 只会瞎猜）。
+REWRITE_SYSTEM = """你在帮智能客服改写用户问题，以便重新检索知识库。
+要求：
+1. 结合"更早对话摘要"和"最近对话"，把用户最后一句话补全成一个**自包含**的完整问题；
+2. 只输出改写后的问题本身，不要解释、不要回答；
+3. 保持原意，不要添加用户没说过的事实（尤其是订单号、日期、金额）。"""
+
+
 def build_context_block(chunks: list[dict]) -> str:
     """把检索结果按 capability 分成两个物理区块（§5.9 ③）。"""
     native: list[str] = []

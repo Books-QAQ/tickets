@@ -1,4 +1,9 @@
-"""编排层配置（全部来自环境变量；密钥只在 Go，这里只放内网地址与内网密钥）。"""
+"""编排层配置（全部来自环境变量；LLM 密钥只在 Go，这里只放内网地址与内网密钥）。
+
+M3 新增：checkpoint DSN 与保留期、答案缓存参数、记忆窗口、改写重试开关。
+注意 `checkpoint_dsn` **含数据库口令** —— 它只存在于编排层进程的环境变量里（不进 git、
+不写日志），这是"checkpoint 表归 Python 管"（ADR-2）带来的必要凭据。
+"""
 
 from __future__ import annotations
 
@@ -24,6 +29,17 @@ class Settings:
     timeout_tool_s: float = 1.5
     timeout_llm_s: float = 20.0
 
+    # —— M3：checkpoint（§5.5）——
+    checkpoint_dsn: str = ""
+    checkpoint_retention_days: int = 7  # 19.8 建议值；配置化
+    checkpoint_cleanup_interval_s: int = 3600  # 后台清理间隔（0 = 不启动后台任务）
+
+    # —— M3：记忆与消解（§9.2/§9.4）——
+    memory_recent_n: int = 5  # 最近 N 轮完整保留
+    memory_summary_max: int = 10  # 摘要最多 N 条
+    rewrite_max: int = 1  # E11 改写重试上限
+    interrupt_max: int = 1  # 每轮 interrupt 上限
+
     @classmethod
     def from_env(cls) -> Settings:
         def g(key: str, default: str = "") -> str:
@@ -37,6 +53,13 @@ class Settings:
             llm_model=g("LLM_MODEL", "mock"),
             round_budget_ms=int(g("ROUND_BUDGET_MS", "8000")),
             top_k=int(g("TOP_K", "5")),
+            checkpoint_dsn=g("CHECKPOINT_DSN"),
+            checkpoint_retention_days=int(g("CHECKPOINT_RETENTION_DAYS", "7")),
+            checkpoint_cleanup_interval_s=int(g("CHECKPOINT_CLEANUP_INTERVAL_S", "3600")),
+            memory_recent_n=int(g("MEMORY_RECENT_N", "5")),
+            memory_summary_max=int(g("MEMORY_SUMMARY_MAX", "10")),
+            rewrite_max=int(g("REWRITE_MAX", "1")),
+            interrupt_max=int(g("INTERRUPT_MAX", "1")),
         )
 
     def gateway_chat_base(self) -> str:

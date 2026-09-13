@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能客服 · tickets</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+           background: #f1f5f9; display: flex; align-items: center; justify-content: center;
+           min-height: 100vh; }
+    .wrap { max-width: 720px; padding: 32px; background: #fff; border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15,23,42,.08); }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: #475569; line-height: 1.7; font-size: 14px; }
+    code { background: #f1f5f9; padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>智能客服（独立页形态）</h1>
+    <p>这是 <code>web/cs.html</code>：与其它页面右下角的悬浮抽屉共用同一份 <code>assets/js/cs.js</code>。
+       打开本页即自动出现客服抽屉（19.5 建议形态）。</p>
+    <p>游客可直接提问；登录后回答会带 <code>authenticated</code> 可见性的知识。会话 ID 存在
+       <code>localStorage</code>，关掉页面再打开仍是同一段会话（多轮指代可用）。</p>
+    <p><a href="/">← 回到首页</a></p>
+  </div>
+  <script src="/assets/js/cs.js"></script>
+</body>
+</html>

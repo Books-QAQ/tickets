@@ -103,6 +103,23 @@ class CapabilityClient:
             "source_labels": source_labels,
         }, self.settings.timeout_classify_s)
 
+    # —— M3：答案缓存（§9.3，查/存都由图内节点发起）——
+
+    async def cache_lookup(self, *, question: str, category: str) -> dict:
+        return await self._post("/internal/cache/lookup",
+                                {"question": question, "category": category},
+                                self.settings.timeout_classify_s)
+
+    async def cache_store(self, *, question: str, category: str, answer: str,
+                          sources: list[dict], personalized: bool) -> dict:
+        return await self._post("/internal/cache/store", {
+            "question": question,
+            "category": category,
+            "answer": answer,
+            "sources": sources,
+            "personalized": personalized,
+        }, self.settings.timeout_classify_s)
+
     async def create_support_ticket(self, *, conv_id: str, user_id: int | None, order_no: str,
                                     category: str, path: str, summary: str) -> dict:
         return await self._post("/internal/support-tickets", {

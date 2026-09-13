@@ -29,34 +29,68 @@ def edge_after_pre_intent(state: CSState) -> Literal["transfer", "greet", "class
     return "classify_rule"
 
 
-def edge_after_classify(state: CSState) -> Literal["route_tool", "llm_arbitrate"]:
+def edge_after_classify(state: CSState) -> Literal["coref", "llm_arbitrate"]:
     if state.get("cls_source") == "fallback":
         # 规则层不可用 → 按 §6.2 跳过该判断（分类落 other），不再调 LLM 兜底
-        return "route_tool"
+        return "coref"
     if state.get("cls_enough"):
-        return "route_tool"  # E3
+        return "coref"  # E3
     return "llm_arbitrate"  # E4
+
+
+def edge_after_cache(state: CSState) -> Literal["verify", "route_tool"]:
+    """M3：缓存命中就连工具/检索/生成一起跳过（§9.3）。
+
+    **但仍然要过 verify**：边界声明注入与引用校验是"答案合规"的一部分，
+    缓存省的是检索+生成，不是合规检查（命中直接 finalize 会让能力边界声明消失，M3 实测踩过）。
+    """
+    if state.get("cache_hit"):
+        return "verify"
+    return "route_tool"  # E7 之前
 
 
 def edge_after_route_tool(state: CSState) -> Literal["exec_tool", "clarify", "retrieve"]:
     if state.get("tool_name"):
         return "exec_tool"  # E5/E6
     if state.get("clarify_options"):
-        return "clarify"  # E8（M2 单轮版；interrupt 版属 M3）
+        return "clarify"  # E8（M3：interrupt 版）
     return "retrieve"  # E7
 
 
-def edge_after_exec_tool(state: CSState) -> Literal["tool_answer", "retrieve", "transfer"]:
+def edge_after_exec_tool(state: CSState) -> Literal["tool_answer", "clarify", "retrieve", "transfer"]:
     if state.get("transfer"):
         return "transfer"  # 业务规则不允许/契约失败 → 转人工（路径由 path_hint 定）
+    if state.get("clarify_options"):
+        return "clarify"  # E8：工具给了多候选（多张可退车票/多笔订单）
     if state.get("tool_direct_answer"):
         return "tool_answer"  # E9：事实类且自足 → 确定性直答
     return "retrieve"  # E10：工具不可用/需与知识库融合 → 回落检索
 
 
-def edge_after_retrieve(state: CSState) -> Literal["transfer", "generate"]:
+def edge_after_clarify(state: CSState) -> Literal["exec_tool", "transfer"]:
+    """E8 的出口：用户选定了 → 带槽位重跑工具；没听懂/乱答 → 转人工（不死循环）。"""
+    if state.get("clarify_rejected") or not state.get("clarify_resolved"):
+        return "transfer"
+    if state.get("tool_name"):
+        return "exec_tool"
+    return "transfer"
+
+
+def edge_after_rewrite(state: CSState) -> Literal["classify_rule", "transfer"]:
+    """E11 出口：改写有效 → 重跑分类/检索；改写被拒 → 转人工（不再空跑一遍）。"""
+    if state.get("rewrite_failed"):
+        return "transfer"
+    return "classify_rule"
+
+
+def edge_after_retrieve(state: CSState) -> Literal["rewrite", "transfer", "generate"]:
     if state.get("retrieve_empty"):
-        return "transfer"  # E12（M1 不含 E11 改写重试）
+        # E11：检索空 + 有上下文 + 未超上限 → 改写后重跑（只改写不回答）
+        if not state.get("retrieve_failed") \
+                and state.get("has_context") \
+                and int(state.get("retry_count") or 0) < int(state.get("rewrite_max") or 1):
+            return "rewrite"
+        return "transfer"  # E12
     if not state.get("above_threshold"):
         return "transfer"  # E13
     return "generate"
@@ -97,6 +131,15 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
     async def llm_arbitrate(state: CSState) -> dict:
         return await N.llm_arbitrate(state, deps)
 
+    async def coref(state: CSState) -> dict:
+        return await N.coref(state, deps)
+
+    async def cache_lookup(state: CSState) -> dict:
+        return await N.cache_lookup(state, deps)
+
+    async def rewrite(state: CSState) -> dict:
+        return await N.rewrite(state, deps)
+
     async def route_tool(state: CSState) -> dict:
         return await N.route_tool(state, deps)
 
@@ -130,6 +173,9 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
         ("greet", greet),
         ("classify_rule", classify_rule),
         ("llm_arbitrate", llm_arbitrate),
+        ("coref", coref),
+        ("cache_lookup", cache_lookup),
+        ("rewrite", rewrite),
         ("route_tool", route_tool),
         ("exec_tool", exec_tool),
         ("tool_answer", tool_answer),
@@ -147,16 +193,22 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
     builder.add_conditional_edges("pre_intent", edge_after_pre_intent,
                                   ["transfer", "greet", "classify_rule"])
     builder.add_conditional_edges("classify_rule", edge_after_classify,
-                                  ["route_tool", "llm_arbitrate"])
-    builder.add_edge("llm_arbitrate", "route_tool")
+                                  ["coref", "llm_arbitrate"])
+    builder.add_edge("llm_arbitrate", "coref")
+    builder.add_edge("coref", "cache_lookup")
+    builder.add_conditional_edges("cache_lookup", edge_after_cache, ["verify", "route_tool"])
     builder.add_conditional_edges("route_tool", edge_after_route_tool, ["exec_tool", "clarify", "retrieve"])
-    builder.add_conditional_edges("exec_tool", edge_after_exec_tool, ["tool_answer", "retrieve", "transfer"])
-    builder.add_conditional_edges("retrieve", edge_after_retrieve, ["transfer", "generate"])
+    builder.add_conditional_edges("exec_tool", edge_after_exec_tool, ["tool_answer", "clarify", "retrieve", "transfer"])
+    builder.add_conditional_edges("clarify", edge_after_clarify, ["exec_tool", "transfer"])
+    builder.add_conditional_edges("retrieve", edge_after_retrieve, ["rewrite", "transfer", "generate"])
+    builder.add_conditional_edges("rewrite", edge_after_rewrite, ["classify_rule", "transfer"])  # E11
     builder.add_conditional_edges("generate", edge_after_generate, ["transfer", "verify"])
     builder.add_conditional_edges("verify", edge_after_verify, ["transfer", "finalize"])
     builder.add_edge("greet", "finalize")
     builder.add_edge("tool_answer", "finalize")
-    builder.add_edge("clarify", "finalize")
+    # 注意：clarify 的出边是**条件边**（E8：选定 → exec_tool / 不可识别 → transfer），
+    # 不能再加静态边 "clarify"→"finalize"，否则 resume 时 transfer 与 finalize 会在同一
+    # 超步并行执行，两个节点都写 answer → InvalidUpdateError（M3 实测踩过）
     builder.add_edge("transfer", "finalize")
     builder.add_edge("finalize", END)
 

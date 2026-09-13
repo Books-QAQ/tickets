@@ -35,6 +35,11 @@ class FakeCapability:
         self.fail_classify = fail_classify
         self.exec_result = exec_result
         self.fail_exec = fail_exec
+        self.cache_hit_result: str | None = None   # 非 None 时 cache_lookup 返回命中
+        self.cache_sources: list[dict] = []
+        self.cache_mode = "embedding"
+        self.cache_lookups: list[dict] = []
+        self.cache_stores: list[dict] = []
         self.calls: list[str] = []
         self.exec_payload: dict[str, Any] = {}
         self.retrieve_payload: dict[str, Any] = {}
@@ -105,6 +110,23 @@ class FakeCapability:
     async def record_metrics(self, trace_id: str, events: list[dict]) -> dict:
         self.calls.append("record_metrics")
         return {"ok": True}
+
+    # —— M3：答案缓存 ——
+
+    async def cache_lookup(self, *, question: str, category: str) -> dict:
+        self.calls.append("cache_lookup")
+        self.cache_lookups.append({"question": question, "category": category})
+        if self.cache_hit_result is None:
+            return {"hit": False, "vector_mode": self.cache_mode}
+        return {"hit": True, "answer": self.cache_hit_result, "sources": self.cache_sources,
+                "score": 0.99, "vector_mode": self.cache_mode}
+
+    async def cache_store(self, *, question: str, category: str, answer: str,
+                          sources: list[dict], personalized: bool) -> dict:
+        self.calls.append("cache_store")
+        self.cache_stores.append({"question": question, "category": category, "answer": answer,
+                                  "personalized": personalized})
+        return {"stored": True, "promoted": True}
 
 
 class FakeLLM:
@@ -326,13 +348,127 @@ async def test_tool_contract_error_transfers_tool_unavailable():
 
 
 @pytest.mark.asyncio
-async def test_multi_candidate_asks_instead_of_guessing():
-    """多候选同分 → 不猜（E8）；M2 为单轮反问，不 exec、不检索"""
+async def test_multi_candidate_interrupts_instead_of_guessing():
+    """E8（M3）：多候选同分 → interrupt 反问；resume 后带着选中的工具重跑（跨轮续跑）"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.types import Command
+
+    cap = FakeCapability(tools=[_tool_cand("order_detail", score=2), _tool_cand("my_tickets", score=2)],
+                         exec_result={"tool": "order_detail", "kind": "ok", "summary": "订单详情如下"})
+    deps = Deps(cap, FakeLLM(), top_k=5)
+    graph = build_graph(deps, checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "clarify-thread"}}
+
+    first = await graph.ainvoke(_state(), config)
+    assert "__interrupt__" in first
+    payload = first["__interrupt__"][0].value
+    assert "order_detail" in payload["options"]
+    assert "exec_tool" not in cap.calls  # 反问阶段不该执行工具
+
+    second = await graph.ainvoke(Command(resume={"text": "1"}), config)
+    assert second["answer"] == "订单详情如下"
+    assert cap.exec_payload["name"] == "order_detail"
+
+
+@pytest.mark.asyncio
+async def test_clarify_rejects_garbage_and_transfers():
+    """resume 值不可识别 → 转人工（不死循环）"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.types import Command
+
     cap = FakeCapability(tools=[_tool_cand("order_detail", score=2), _tool_cand("my_tickets", score=2)])
-    out = await _run(cap)
-    assert "exec_tool" not in cap.calls
+    graph = build_graph(Deps(cap, FakeLLM(), top_k=5), checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "clarify-bad"}}
+    await graph.ainvoke(_state(), config)
+    out = await graph.ainvoke(Command(resume={"text": "我也不知道"}), config)
+    assert out["transfer"] is True
+    assert out["transfer_path"] == "deterministic"
+    assert out["support_ticket_no"]
+
+
+# —— M3：缓存 / 指代消解 / 改写重试 ——
+
+@pytest.mark.asyncio
+async def test_cache_hit_skips_tool_retrieve_and_llm():
+    """缓存命中 → 连工具/检索/生成一起跳过（§9.3）"""
+    cap = FakeCapability(tools=[])
+    cap.cache_hit_result = "退票手续费按档位收取（缓存答案）"
+    # 真实缓存条目**带出处**：命中后 verify 要用它做引用校验（没有出处的答案本来就不该被缓存）
+    cap.cache_sources = [{"label": "refund-fee-basics·段落1"}]
+    llm = FakeLLM()
+    out = await _run(cap, llm, question="退票手续费怎么算")
+    assert out["answer"] == "退票手续费按档位收取（缓存答案）"
+    assert out["source"] if "source" in out else True
     assert "retrieve" not in cap.calls
-    assert "订单详情" in out["answer"] and "我的车票" in out["answer"]
+    assert "exec_tool" not in cap.calls
+    assert llm.deltas == []          # 连模型都没调
+    assert "cache_lookup" in cap.calls
+    # **但合规检查不能省**：边界声明/引用校验仍要跑（缓存省的是检索+生成）
+    assert "verify" in cap.calls
+    assert out["cache_hit"] is True
+
+
+@pytest.mark.asyncio
+async def test_cache_key_uses_resolved_question_after_coref():
+    """缓存查询用的是消解后的分类与问题（所以 cache_lookup 必须在 coref 之后）"""
+    cap = FakeCapability(cls={"scores": {}, "top1": "other", "gap": 0, "enough": True})
+    await _run(cap, question="那这个呢")
+    assert cap.cache_lookups, "应调用缓存查询"
+    # 首轮无历史 → 不继承，分类仍是 other
+    assert cap.cache_lookups[0]["category"] == "other"
+
+
+@pytest.mark.asyncio
+async def test_coref_inherits_previous_category_with_scores():
+    """指代消解：分类 other + 指代词 + 有历史 → 继承上一轮分类并**补 cls_scores**"""
+    cap = FakeCapability(cls={"scores": {}, "top1": "other", "gap": 0, "enough": True})
+    deps = Deps(cap, FakeLLM(), top_k=5)
+    graph = build_graph(deps)
+    state = _state("那这个呢")
+    state["recent"] = [{"question": "退票手续费怎么算", "category": "refund"}]
+    out = await graph.ainvoke(state)
+    assert out["category"] == "refund"
+    assert out["cls_source"] == "inherit"
+    assert out["cls_scores"] == {"refund": 1}   # 不补得分会让软路由检索落空
+    assert cap.retrieve_payload["category"] == "refund"
+
+
+@pytest.mark.asyncio
+async def test_e11_rewrite_only_with_context():
+    """E11：检索空 + 有上下文 + 未超上限 → 改写后重跑；无上下文不改写"""
+    empty = {"chunks": [], "source_labels": [], "top1_cos": 0.0, "above_threshold": False,
+             "vector_mode": "embedding", "empty": True, "level": 2}
+
+    # 无上下文：直接转人工（不让 LLM 瞎猜）
+    cap = FakeCapability(retrieve=empty)
+    out = await _run(cap, question="那这个呢")
+    assert out["transfer"] is True
+    assert "rewrite" not in cap.calls
+
+    # 有上下文：先改写再重跑一次（retry_count 封顶）
+    cap2 = FakeCapability(retrieve=empty)
+    llm = FakeLLM(pick="退票手续费怎么算")
+    deps = Deps(cap2, llm, top_k=5)
+    graph = build_graph(deps)
+    state = _state("那这个呢")
+    state["recent"] = [{"question": "退票手续费怎么算", "category": "refund"}]
+    out2 = await graph.ainvoke(state)
+    assert out2["retry_count"] >= 1
+    assert out2["transfer"] is True           # 改写后仍无依据 → 转人工（不硬答）
+
+
+@pytest.mark.asyncio
+async def test_finalize_updates_memory_window_and_stores_cache():
+    """收尾：双层窗口更新 + 正常问答才入缓存（工具直答/转人工不入）"""
+    cap = FakeCapability(tools=[])
+    state = _state("退票手续费怎么算")
+    state["recent"] = [{"question": "q1", "category": "refund"}] * 5
+    graph = build_graph(Deps(cap, FakeLLM(), top_k=5))
+    out = await graph.ainvoke(state)
+    assert len(out["recent"]) == 5                     # 最近 5 轮封顶
+    assert "退票手续费怎么算" in out["summary"] or out["summary"]  # 溢出的进摘要
+    assert cap.cache_stores, "正常问答应尝试入缓存"
+    assert cap.cache_stores[0]["personalized"] is False
 
 
 @pytest.mark.asyncio

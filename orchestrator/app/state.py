@@ -40,6 +40,27 @@ class CSState(TypedDict, total=False):
     cls_scores: dict[str, int]  # 软路由要用，禁止丢弃
     retry_count: int
 
+    # —— M3：会话记忆（图状态内存活，checkpoint 就是它的持久层 —— §9.2/ADR-9）——
+    recent: list  # 最近 N 轮完整 {question, category}
+    summary: str  # 第 6~15 轮的确定性摘要「问题(分类)；…」
+    has_context: bool
+    search_question: str  # 改写后用于分类/检索的问题（原问题仍保留在 question）
+    rewrite_failed: bool  # E11：改写被拒（不是问句/带引用/太长）→ 直接转人工，不再空跑第二遍
+    coref_from: str  # 指代继承自哪一轮（观测用）
+    rewrite_max: int  # E11 上限（来自 settings）
+    interrupt_max: int  # 每轮 interrupt 上限
+
+    # —— M3：答案缓存 ——
+    cache_hit: bool
+    cache_score: float
+    cache_mode: str  # embedding | ngram | disabled
+
+    # —— M3：消歧反问（interrupt）——
+    clarify_options: list  # 展示用（已脱敏）
+    clarify_values: list  # 机器可用的原始值（与 options 同序，仅在图状态内使用）
+    clarify_resolved: str
+    clarify_rejected: bool
+
     # —— 派生标志（节点写入、条件边读取）——
     # 注意：**必须在这里声明**，否则 langgraph 会静默丢弃未声明的 key，
     # 条件边就会读到 None（本 M1 实测踩过：above_threshold 丢失导致 E13 走错分支）。
@@ -63,7 +84,6 @@ class CSState(TypedDict, total=False):
     tool_kind: str  # ok|empty|slots_incomplete|guest_required|not_found|unavailable|blocked
     tool_path_hint: str  # transfer_tool_unavailable | transfer_deterministic | transfer_capability_absent
     tools_available: list  # 工具清单（E6 的 LLM 兜底路由只能从这里选，白名单）
-    clarify_options: list  # 多候选/歧义选项（E8；M2 单轮反问版）
     order_no: str  # 从槽位带出的订单号（工单摘要用）
     chunks: list[dict]
     source_labels: list[str]
@@ -82,7 +102,7 @@ class CSState(TypedDict, total=False):
     degraded: Annotated[dict, merge_dict]
     stage_ms: Annotated[dict, merge_dict]
     tokens: Annotated[dict, merge_dict]
-    history: Annotated[list, append_list]  # 多轮（Recent N 轮；滚动摘要属 M3）
+    history: list  # 【废弃】M1 的 append-only 轮次累积；M3 起改用 recent + summary（不再写入）
     events: Annotated[list, append_list]  # 埋点事件（落 /internal/metrics）
 
 
@@ -104,4 +124,12 @@ def new_initial_state(*, question: str, conv_id: str, trace_id: str, user_id: in
         stage_ms={},
         tokens={},
         retry_count=0,
+        # M3：**不要在这里设 recent/summary**！
+        # 入口把 new_initial_state() 当输入传给 ainvoke，langgraph 会把它当作一次 state 更新
+        # —— 写成 recent=[]/summary="" 就等于每轮把 checkpoint 里的记忆清空（多轮指代必失效）。
+        # 记忆由 load_context 从 checkpoint 里读（`or []` 兜底），由 finalize 写回。
+        search_question=question,
+        cache_hit=False,
+        clarify_options=[],
+        clarify_values=[],
     )
