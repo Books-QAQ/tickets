@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -16,6 +17,7 @@ import (
 	"github.com/Books-QAQ/tickets/internal/bootstrap"
 	"github.com/Books-QAQ/tickets/internal/cache"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/metrics"
 	"github.com/Books-QAQ/tickets/internal/payment"
 	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/routes"
@@ -106,6 +108,41 @@ func main() {
 	}
 	server.MQ = mq
 	server.WithCS(csComponents)
+
+	// —— M4：运维面（§14/§16）——
+	// ADMIN_ENABLED=1 但没给 ADMIN_TOKEN **必须拒绝启动**，不能"降级放行"：
+	// 管理端暴露全量会话/工单与内部指标，宁可不启动也不裸奔。
+	if config.AdminEnabled && strings.TrimSpace(config.AdminToken) == "" {
+		log.Fatal().Msg("ADMIN_ENABLED=1 但 ADMIN_TOKEN 未配置：拒绝启动（管理端不允许无鉴权运行）")
+	}
+	if config.AdminEnabled {
+		log.Info().Msg("管理端已启用：/metrics 与 /admin/* 需要 Authorization: Bearer <ADMIN_TOKEN>")
+		collector := metrics.NewCollector(csComponents.AuxCounter())
+		// 惰性 gauge：只在 scrape 时查库；**查询失败返回 -1，不谎报 0**（0 与"查不到"是两件事）
+		collector.RegisterGauge("kb_chunks", func() float64 {
+			var n int64
+			if err := dbConn.QueryRow("SELECT COUNT(*) FROM kb_chunks").Scan(&n); err != nil {
+				return -1
+			}
+			return float64(n)
+		})
+		collector.RegisterGauge("cs_conversations", func() float64 {
+			var n int64
+			if err := dbConn.QueryRow("SELECT COUNT(*) FROM cs_conversations").Scan(&n); err != nil {
+				return -1
+			}
+			return float64(n)
+		})
+		collector.RegisterGauge("support_tickets_open", func() float64 {
+			var n int64
+			if err := dbConn.QueryRow(
+				`SELECT COUNT(*) FROM support_tickets WHERE status IN ('pending','assigned')`).Scan(&n); err != nil {
+				return -1
+			}
+			return float64(n)
+		})
+		server.Metrics = collector
+	}
 
 	// 注入支付渠道：mock（始终可用）+ 支付宝（未配置密钥时降级禁用）
 	mockProvider := payment.NewMockProvider()

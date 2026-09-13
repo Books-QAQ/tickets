@@ -75,6 +75,21 @@ ORDER BY expired_at ASC
 LIMIT ?`
 
 // PendingOrder 待支付订单（带 SQL 算出的剩余分钟）
+// OrderLeftMinutesForUser 剩余支付分钟数（**在 SQL 里算**）。
+//
+// 为什么必须下沉 SQL（M3 实测同源坑）：应用 DSN 是 `loc=Asia/Shanghai`，而 MySQL 容器会话
+// 默认 UTC，`time.Until(expired_at)` 在 Go 里比会差 8 小时（实测：15 分钟后到期的订单被判"已超时"）。
+// 同时保持越权铁律：**每条 SQL 都必须带 user_id 条件**。
+func (q *Queries) OrderLeftMinutesForUser(ctx context.Context, orderNo string, userID int32) (int64, error) {
+	const query = `SELECT TIMESTAMPDIFF(MINUTE, NOW(), expired_at) FROM orders
+	               WHERE order_no = ? AND user_id = ?`
+	var left sql.NullInt64
+	if err := q.db.QueryRowContext(ctx, query, orderNo, userID).Scan(&left); err != nil {
+		return 0, err
+	}
+	return left.Int64, nil
+}
+
 type PendingOrder struct {
 	Order
 	LeftMinutes int64 `json:"left_minutes"`

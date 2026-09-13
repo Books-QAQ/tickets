@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v2"
+
 	"github.com/Books-QAQ/tickets/internal/api"
 	"github.com/Books-QAQ/tickets/internal/api/handlers"
 	"github.com/Books-QAQ/tickets/internal/api/middleware"
@@ -52,17 +53,45 @@ func SetupRoutes(server *api.Server) error {
 		csAux = server.CS.Aux
 	}
 	csHandler := handlers.NewCSHandler(server.Store, server.Redis, server.TokenMaker, server.Config, csAux)
-	server.App.Post("/cs/ask", csHandler.Ask)
+	// AI 链路双闸限流（§14.5）：身份桶（凭证 hash）+ IP 桶；限流值是**成本保护值**，不是容量上限
+	csRL := middleware.CSRateLimitMiddleware(server.Redis, middleware.CSRateLimitConfig{
+		Window:  server.Config.CSRateLimitWindow,
+		MaxIP:   server.Config.CSRateLimitMaxIP,
+		MaxUser: server.Config.CSRateLimitMaxUser,
+	}, csAux)
+	server.App.Post("/cs/ask", csRL, csHandler.Ask)
 	server.App.Delete("/cs/session", csHandler.DeleteSession)
 	server.App.Post("/cs/feedback", csHandler.PostFeedback)
 	server.App.Post("/cs/support-tickets", csHandler.PostSupportTicket)
+
+	// —— M4：运维面（§14/§16）——
+	// /readyz 公开（探针要能被编排器/负载均衡调用），**只报布尔与必要计数，不回显任何密钥**；
+	// /metrics 与 /admin/* 走管理端鉴权（指标与全量数据不该对公网裸奔）。
+	opsH := handlers.NewOpsHandler(server.Store.RawDB(), server.Redis, server.Config, server.Metrics)
+	server.App.Get("/readyz", opsH.Ready)
+	server.App.Get("/admin", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		return c.SendFile("./web/admin.html")
+	})
+	if server.Config.AdminEnabled {
+		adminAuth := middleware.AdminAuthMiddleware(server.Config.AdminToken)
+		adminH := handlers.NewAdminHandler(server.Store.RawDB(), server.Config, server.Metrics)
+		server.App.Get("/metrics", adminAuth, opsH.Prometheus)
+		admin := server.App.Group("/admin", adminAuth)
+		admin.Get("/metrics", opsH.AdminMetrics)
+		admin.Get("/conversations", adminH.ListConversations)
+		admin.Get("/support-tickets", adminH.ListSupportTickets)
+		admin.Post("/support-tickets/:no/state", adminH.UpdateTicketState)
+		admin.Get("/turns", adminH.ListTurns)
+		admin.Get("/capability", adminH.CapabilityStats)
+	}
 
 	// —— 智能AI客服：跨语言契约（仅内网 + 内网密钥，§6.1）——
 	// 注意：**必须注册在下面的 authGroup 之前**。Fiber 的 group 中间件作用于其后注册的路由，
 	// 若放在 authGroup（prefix "/" + JWT 校验）之后，/internal/* 会先被 JWT 中间件拦成 401。
 	// 组件装配失败（server.CS == nil）时不注册，避免半残状态被调用。
 	if server.CS != nil && server.CS.KB != nil {
-		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.Tools, server.CS.Cache, server.CS.KB.DB)
+		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.Tools, server.CS.Cache, server.CS.KB.DB, server.Metrics)
 		internal := server.App.Group("/internal", middleware.InternalKeyMiddleware(server.Config.InternalKey))
 		internal.Post("/cache/lookup", ih.CacheLookup)
 		internal.Post("/cache/store", ih.CacheStore)

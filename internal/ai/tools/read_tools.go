@@ -157,7 +157,7 @@ func (t orderDetailTool) Exec(ctx context.Context, id Identity, s SlotSet) Resul
 		if err != nil {
 			return Result{Kind: KindUnavailable, Reason: "db_error"}
 		}
-		return t.resultFor(o)
+		return t.resultFor(ctx, id, o)
 	}
 
 	// 无订单号：取最近订单；只有 1 单就直接答（不必让用户再报号），多单则消歧反问
@@ -169,7 +169,7 @@ func (t orderDetailTool) Exec(ctx context.Context, id Identity, s SlotSet) Resul
 	case 0:
 		return Result{Kind: KindEmpty, Summary: "您当前没有订单记录。"}
 	case 1:
-		return t.resultFor(orders[0])
+		return t.resultFor(ctx, id, orders[0])
 	default:
 		opts := make([]string, 0, len(orders))
 		vals := make([]string, 0, len(orders))
@@ -188,7 +188,7 @@ func (t orderDetailTool) Exec(ctx context.Context, id Identity, s SlotSet) Resul
 	}
 }
 
-func (t orderDetailTool) resultFor(o db.Order) Result {
+func (t orderDetailTool) resultFor(ctx context.Context, id Identity, o db.Order) Result {
 	summary := fmt.Sprintf("订单 %s：金额%d元，状态%s", MaskOrderNo(o.OrderNo), o.Amount, orderStatusText(o.Status))
 	if o.PayChannel.Valid {
 		summary += "，支付渠道" + o.PayChannel.String
@@ -197,9 +197,16 @@ func (t orderDetailTool) resultFor(o db.Order) Result {
 		summary += "，支付时间" + o.PaidAt.Time.Format("2006-01-02 15:04")
 	}
 	if o.Status == "pending" {
-		if left := time.Until(o.ExpiredAt); left > 0 {
-			summary += fmt.Sprintf("，剩余支付时间约%d分钟", int(left.Minutes()))
-		} else {
+		// 剩余时间**从 SQL 取**（不在 Go 里比时钟）：DSN 时区与容器会话时区可能不同，
+		// M3 实测过"15 分钟后到期的订单被判已超时"（差 8 小时）。
+		// 取不到就**不报数字**（宁可不显示，也不给一个错的时间）
+		left, err := t.deps.Store.OrderLeftMinutesForUser(ctx, o.OrderNo, id.UserID)
+		switch {
+		case err != nil:
+			summary += "，剩余支付时间以订单页为准"
+		case left > 0:
+			summary += fmt.Sprintf("，剩余支付时间约%d分钟", left)
+		default:
 			summary += "，该订单已超时（将自动关闭）"
 		}
 	}

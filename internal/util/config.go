@@ -41,6 +41,12 @@ type Config struct {
 	ALIPAYRETURNURL             string `mapstructure:"ALIPAY_RETURN_URL"`
 	// —— 智能AI客服（M1）——
 	InternalKey      string  `mapstructure:"INTERNAL_KEY"`
+	// —— M4：运维面与治理（§14/§16）——
+	AdminEnabled       bool          `mapstructure:"ADMIN_ENABLED"`         // 管理端开关；启用则必须有 token
+	AdminToken         string        `mapstructure:"ADMIN_TOKEN"`           // 管理端 Bearer；缺失时拒绝启动
+	CSRateLimitWindow  time.Duration `mapstructure:"CS_RATE_LIMIT_WINDOW"`  // AI 链路限流窗口
+	CSRateLimitMaxIP   int64         `mapstructure:"CS_RATE_LIMIT_MAX_IP"`  // IP 桶（成本保护值）
+	CSRateLimitMaxUser int64         `mapstructure:"CS_RATE_LIMIT_MAX_USER"` // 身份桶（凭证 hash）
 	QdrantURL        string  `mapstructure:"QDRANT_URL"`
 	QdrantAPIKey     string  `mapstructure:"QDRANT_API_KEY"`
 	QdrantCollection string  `mapstructure:"QDRANT_COLLECTION"`
@@ -94,6 +100,9 @@ func LoadConfig(path string) (config Config, err error) {
 		"PYTHON_BASE_URL",
 		// 工具层（M2）
 		"PENALTY_SEMANTICS_CONFIRMED", "GUEST_TICKET_ALLOWED",
+		// 运维面与治理（M4）
+		"ADMIN_ENABLED", "ADMIN_TOKEN",
+		"CS_RATE_LIMIT_WINDOW", "CS_RATE_LIMIT_MAX_IP", "CS_RATE_LIMIT_MAX_USER",
 	} {
 		_ = viper.BindEnv(key)
 	}

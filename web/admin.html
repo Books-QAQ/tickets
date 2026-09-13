@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能客服 · 运营大盘</title>
+  <style>
+    :root { --fg:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc; --accent:#2563eb; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color:var(--fg); background:var(--bg); }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:14px 20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    header h1 { font-size:16px; margin:0; }
+    input[type=password] { padding:7px 10px; border:1px solid var(--line); border-radius:8px; width:260px; font-family:inherit; }
+    button { padding:7px 14px; border:none; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; font-size:13px; }
+    button.ghost { background:#eef2ff; color:var(--accent); }
+    main { padding:18px 20px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
+    section { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+    h2 { font-size:13px; margin:0 0 10px; color:var(--muted); font-weight:600; letter-spacing:.02em; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:600; }
+    .kpi { display:flex; flex-wrap:wrap; gap:10px; }
+    .kpi div { background:#f1f5f9; border-radius:10px; padding:8px 12px; font-size:12.5px; }
+    .kpi b { display:block; font-size:17px; margin-top:2px; }
+    .bar { height:8px; background:#eff6ff; border-radius:6px; overflow:hidden; }
+    .bar > i { display:block; height:100%; background:var(--accent); }
+    .mono { font-family:ui-monospace,Consolas,monospace; }
+    .err { color:#b91c1c; font-size:13px; padding:8px 20px; }
+    .muted { color:var(--muted); }
+    select { padding:6px 8px; border:1px solid var(--line); border-radius:8px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>智能客服 · 运营大盘</h1>
+  <input id="token" type="password" placeholder="ADMIN_TOKEN（只存本机 localStorage）" autocomplete="off">
+  <button onclick="saveToken()">保存并刷新</button>
+  <button class="ghost" onclick="load()">刷新</button>
+  <label class="muted" style="font-size:12px">坐席ID <input id="seat" type="number" value="5" style="width:70px;padding:5px 8px;border:1px solid var(--line);border-radius:8px"></label>
+  <span class="muted mono" id="meta"></span>
+</header>
+<div class="err" id="err" style="display:none"></div>
+
+<main>
+  <section>
+    <h2>核心 KPI（与 /metrics 同源，不是第二套口径）</h2>
+    <div class="kpi" id="kpi"></div>
+  </section>
+
+  <section>
+    <h2>分段延迟（p50 / p95 / avg，样本数）</h2>
+    <table><thead><tr><th>阶段</th><th>p50</th><th>p95</th><th>avg</th><th>样本</th><th></th></tr></thead>
+      <tbody id="stages"></tbody></table>
+  </section>
+
+  <section>
+    <h2>能力台账分布（B 方案：supported / roadmap / industry）</h2>
+    <table><thead><tr><th>状态</th><th>数量</th><th></th></tr></thead><tbody id="cap"></tbody></table>
+  </section>
+
+  <section>
+    <h2>工单 <select id="stFilter" onchange="load()">
+      <option value="">全部</option><option value="pending">pending</option>
+      <option value="assigned">assigned</option><option value="resolved">resolved</option>
+      <option value="closed">closed</option></select></h2>
+    <table><thead><tr><th>工单号</th><th>路径</th><th>状态</th><th>分类</th><th>订单</th><th>操作</th></tr></thead>
+      <tbody id="tickets"></tbody></table>
+  </section>
+
+  <section>
+    <h2>最近对话流水（审计视图；真相源是 checkpoint）</h2>
+    <table><thead><tr><th>时间</th><th>角色</th><th>分类</th><th>来源</th><th>内容</th></tr></thead>
+      <tbody id="turns"></tbody></table>
+  </section>
+</main>
+
+<script>
+const TOKEN_KEY = "cs_admin_token";
+document.getElementById("token").value = localStorage.getItem(TOKEN_KEY) || "";
+
+function saveToken() {
+  localStorage.setItem(TOKEN_KEY, document.getElementById("token").value.trim());
+  load();
+}
+function tok() { return localStorage.getItem(TOKEN_KEY) || ""; }
+function showErr(msg) {
+  const e = document.getElementById("err");
+  e.style.display = msg ? "block" : "none";
+  e.textContent = msg || "";
+}
+async function api(path) {
+  const r = await fetch(path, { headers: { Authorization: "Bearer " + tok() } });
+  if (!r.ok) throw new Error(path + " → HTTP " + r.status + (r.status === 401 ? "（token 不对或未设置）" : ""));
+  return r.json();
+}
+function q(id, html) { document.getElementById(id).innerHTML = html; }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+async function load() {
+  showErr("");
+  if (!tok()) { showErr("请先填入 ADMIN_TOKEN（服务端设置 ADMIN_TOKEN 后重启才会注册 /admin/*）"); return; }
+  try {
+    const m = await api("/admin/metrics");
+    const c = m.counters || {};
+    const pct = (n, d) => (d > 0 ? (100 * n / d).toFixed(1) + "%" : "—");
+    const lookups = c["cache_lookup_total"] || 0, hits = c["cache_hit_total"] || 0;
+    q("kpi", [
+      ["问答轮次", c["node_finalize"] || 0],
+      ["缓存命中率", pct(hits, lookups)],
+      ["转人工", c["node_transfer"] || 0],
+      ["闸门关闭（未确认规则）", c["tool_gate_closed_total"] || 0],
+      ["工具不可用", c["tool_unavailable_total"] || 0],
+      ["低于阈值", c["below_threshold_total"] || 0],
+      ["编排层不可用", c["orchestrator_unavailable_total"] || 0],
+      ["限流拦截", (c["cs_rate_limited_total:ip"] || 0) + (c["cs_rate_limited_total:cred"] || 0)],
+      ["客户端断开", c["sse_client_aborted_total"] || 0],
+      ["KB chunks", (m.gauges && m.gauges.kb_chunks) || "—"],
+    ].map(([k, v]) => `<div>${esc(k)}<b>${esc(v)}</b></div>`).join(""));
+    document.getElementById("meta").textContent =
+      `uptime ${Math.round(m.uptime_seconds || 0)}s｜vector_mode=${(m.config_flags || {}).vector_mode}｜llm=${(m.config_flags || {}).llm_provider}`;
+    const running = await api("/readyz").catch(() => null);
+    if (running) {
+      document.getElementById("meta").textContent +=
+        `｜ready=${running.ready}（kb=${running.checks.kb_chunks} qdrant=${running.checks.qdrant_points} orch=${running.checks.orchestrator}）`;
+    }
+
+    const st = m.stage_ms || {};
+    const maxP95 = Math.max(1, ...Object.values(st).map(s => s.p95 || 0));
+    q("stages", Object.entries(st).sort((a, b) => (b[1].p95 || 0) - (a[1].p95 || 0)).map(([k, s]) =>
+      `<tr><td class="mono">${esc(k)}</td><td>${s.p50.toFixed(1)}</td><td>${s.p95.toFixed(1)}</td><td>${s.avg.toFixed(1)}</td><td>${s.samples}</td>
+       <td><div class="bar"><i style="width:${(100 * (s.p95 || 0) / maxP95).toFixed(1)}%"></i></div></td></tr>`).join(""));
+
+    const cap = await api("/admin/capability");
+    q("cap", (cap.items || []).map(i =>
+      `<tr><td>${esc(i.status)}</td><td>${i.count}</td><td class="muted">${(100 * i.count / (cap.total || 1)).toFixed(0)}%</td></tr>`).join(""));
+
+    const stFilter = document.getElementById("stFilter").value;
+    const tk = await api("/admin/support-tickets?limit=20" + (stFilter ? "&status=" + stFilter : ""));
+    q("tickets", (tk.items || []).map(t => `<tr>
+      <td class="mono">${esc(t.ticket_no)}</td><td>${esc(t.path)}</td><td>${esc(t.status)}</td>
+      <td>${esc(t.category)}</td><td class="mono">${esc(t.order_no_masked)}</td>
+      <td>${["assigned", "resolved", "closed"].map(s =>
+        `<button class="ghost" onclick="move('${esc(t.ticket_no)}','${s}')">${s}</button>`).join(" ")}</td></tr>`).join("")
+      || `<tr><td colspan="6" class="muted">暂无工单</td></tr>`);
+
+    const tr = await api("/admin/turns?limit=20");
+    q("turns", (tr.items || []).map(x => `<tr>
+      <td class="mono">${esc((x.created_at || "").slice(11, 19))}</td><td>${esc(x.role)}</td>
+      <td>${esc(x.category)}</td><td>${esc(x.source)}</td>
+      <td>${esc((x.content || "").slice(0, 60))}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="muted">暂无流水</td></tr>`);
+  } catch (e) {
+    showErr(String(e.message || e));
+  }
+}
+
+async function move(no, status) {
+  // assigned_to 是**坐席用户 id**（int 列）：传字符串会被 MySQL 拒（实测 500）
+  const seat = parseInt(document.getElementById("seat").value || "0", 10) || 0;
+  const body = { status: status };
+  if (seat > 0) body.assigned_to = seat;
+  const r = await fetch("/admin/support-tickets/" + encodeURIComponent(no) + "/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok() },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); showErr(j.error || ("HTTP " + r.status)); }
+  load();
+}
+load();
+</script>
+</body>
+</html>

@@ -29,6 +29,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
+	"github.com/Books-QAQ/tickets/internal/cache"
 	"github.com/Books-QAQ/tickets/internal/util"
 )
 
@@ -225,11 +226,40 @@ func main() {
 		}
 	}
 
+	// 知识库变了 ⇒ **答案缓存必须失效**（M3 滞留项）。
+	// 缓存里存的是"依据旧知识库生成的答案"，知识库更新后它们会变成**过期却笃定的答案**
+	// ——比答不上来更糟。这里在入库成功后清掉 cs:ac:*（M4）。
+	if !opt.dryRun {
+		if flushed, err := flushAnswerCache(ctx, cfg); err != nil {
+			log.Warn().Err(err).Msg("答案缓存失效失败（缓存会按 TTL 自然过期，但请检查 Redis 配置）")
+		} else if flushed >= 0 {
+			log.Info().Int("flushed", flushed).Msg("已清空答案缓存 cs:ac:*（知识库变更 → 旧答案不得复用）")
+		}
+	}
+
 	log.Info().
 		Int("docs", stat.docs).Int("chunks", stat.chunks).Int("skipped", stat.skipped).
 		Int("embedded", stat.embedded).Int("pruned_chunks", stat.prunedChunks).Int("deleted_docs", stat.deletedDocs).
 		Bool("dry_run", opt.dryRun).
 		Msg("kb-sync 完成")
+}
+
+// flushAnswerCache 清空答案级缓存的全部键（`cs:ac:*`）。返回清掉的键数；Redis 不可用返回 -1 + err。
+func flushAnswerCache(ctx context.Context, cfg util.Config) (int, error) {
+	rdb, err := cache.NewRedisClient(cfg)
+	if err != nil {
+		return -1, err
+	}
+	defer rdb.Close()
+	// 用 EVAL 一次清完：避免 SCAN 分页期间有新键写入而漏清
+	const lua = `local ks = redis.call('keys', 'cs:ac:*')
+	              for i = 1, #ks do redis.call('del', ks[i]) end
+	              return #ks`
+	n, err := rdb.Eval(ctx, lua, nil).Int()
+	if err != nil {
+		return -1, err
+	}
+	return n, nil
 }
 
 func payloadOf(c kb.Chunk) map[string]any {

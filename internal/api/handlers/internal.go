@@ -17,6 +17,7 @@ import (
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
 	"github.com/Books-QAQ/tickets/internal/ai/llm"
 	"github.com/Books-QAQ/tickets/internal/ai/tools"
+	"github.com/Books-QAQ/tickets/internal/metrics"
 )
 
 // InternalHandler 跨语言契约（Go 提供，仅内网；§6.1）
@@ -28,12 +29,13 @@ type InternalHandler struct {
 	Tools     *tools.Registry
 	Cache     *answercache.Cache
 	DB        *sql.DB
+	Metrics   *metrics.Collector // M4：图事件折进指标（分段延迟 + 中断/恢复）
 }
 
 func NewInternalHandler(store *kb.Store, retriever *kb.Retriever, provider llm.Provider, aux *kb.Aux,
-	reg *tools.Registry, cache *answercache.Cache, db *sql.DB) *InternalHandler {
+	reg *tools.Registry, cache *answercache.Cache, db *sql.DB, mc *metrics.Collector) *InternalHandler {
 	return &InternalHandler{Store: store, Retriever: retriever, LLM: provider, Aux: aux,
-		Tools: reg, Cache: cache, DB: db}
+		Tools: reg, Cache: cache, DB: db, Metrics: mc}
 }
 
 // ---------- M3：答案缓存（§9.3，查/存都在图内节点发起）----------
@@ -413,6 +415,22 @@ func (h *InternalHandler) RecordMetrics(c *fiber.Ctx) error {
 		h.Aux.Inc("node_" + e.Node)
 		if e.Decision != "" {
 			h.Aux.Inc("decision_" + e.Node + "_" + e.Decision)
+		}
+		// M4：图事件折进指标（**Go 侧唯一计数点**，§14.1）
+		if h.Metrics != nil {
+			if st := metrics.StageName(e.Node); st != "" && e.MS > 0 {
+				h.Metrics.ObserveStage(st, float64(e.MS))
+			}
+			switch e.Decision {
+			case "interrupt":
+				h.Aux.Inc("graph_interrupt_total")
+			case "resume":
+				h.Aux.Inc("graph_resume_total")
+			case "checkpoint_error":
+				h.Aux.Inc("checkpoint_errors_total")
+			case "retry", "rewritten", "rejected":
+				h.Aux.Inc("graph_retry_total")
+			}
 		}
 	}
 	return c.JSON(fiber.Map{"ok": true})

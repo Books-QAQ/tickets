@@ -18,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
 	"github.com/Books-QAQ/tickets/internal/token"
@@ -110,6 +111,7 @@ func (h *CSHandler) Ask(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "conv_id 必须是 UUID"})
 	}
 	traceID := uuid.NewString()
+	c.Set("X-Trace-Id", traceID) // §14.1：trace 全链路，客户端凭它反馈/排障
 	ident := h.resolveIdentity(c, req.DeviceID)
 	h.ensureConversation(c.Context(), convID, ident, req.Question)
 
@@ -153,7 +155,47 @@ func (h *CSHandler) askJSON(c *fiber.Ctx, payload map[string]any, convID, traceI
 	}
 	res["conv_id"] = convID
 	res["trace_id"] = traceID
+	// §14.1 结构化日志（一行一条）：字段名与设计文档一致，便于用日志核口径
+	h.logTurn("cs_ask", traceID, convID, ident, res, 0)
 	return c.JSON(res)
+}
+
+// logTurn 一行结构化日志（不含任何密钥/明文凭证；订单号已在工具出口脱敏）
+func (h *CSHandler) logTurn(evt, traceID, convID string, ident identity, res map[string]any, wallMS int64) {
+	stage, _ := json.Marshal(res["stage_ms"])
+	ev := log.Info().Str("evt", evt).Str("trace_id", traceID).Str("conv_id", convID).
+		Bool("guest", ident.Guest).
+		Str("category", str(res["category"])).Str("source", str(res["source"])).
+		Bool("cache_hit", res["cache_hit"] == true).
+		Bool("transfer", res["transfer"] == true).
+		Str("transfer_path", str(res["transfer_path"])).
+		Str("tool", str(res["tool_name"])).
+		Str("tool_kind", str(res["tool_kind"])).
+		Float64("top1_cos", num(res["top1_cos"])).
+		Str("vector_mode", str(res["vector_mode"])).
+		Int64("wall_ms", wallMS).
+		RawJSON("stage_ms", stage)
+	if t, ok := res["tokens"].(map[string]any); ok && len(t) > 0 {
+		ev = ev.Interface("tokens", t)
+	}
+	ev.Msg("cs_turn")
+}
+
+func str(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func num(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	}
+	return 0
 }
 
 // askStream SSE 透传（§6.3）：不缓冲、逐事件 Flush；写失败即取消上游；读空闲超时而非整轮超时

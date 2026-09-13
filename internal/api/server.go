@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
+	"github.com/Books-QAQ/tickets/internal/metrics"
 	"github.com/Books-QAQ/tickets/internal/payment"
 	"github.com/Books-QAQ/tickets/internal/queue"
 	"github.com/Books-QAQ/tickets/internal/token"
@@ -23,6 +24,8 @@ type Server struct {
 	PaymentProviders []payment.Provider
 	// CS 智能AI客服组件（M1），由 main 注入；为 nil 时不注册 /internal/*。
 	CS *CSComponents
+	// Metrics 指标收集器（M4）；为 nil 时 /metrics 与 /readyz 的量化项降级。
+	Metrics *metrics.Collector
 }
 
 func NewServer(config util.Config, store *db.Store, redisClient *redis.Client) (*Server, error) {

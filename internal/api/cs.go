@@ -31,6 +31,14 @@ type CSComponents struct {
 	LLMDegraded bool // true = 走的是 mock provider（degraded.llm）
 }
 
+// AuxCounter 暴露计数点（M4 指标收集器要用它做单一计数源；CS 组件为 nil 时返回 nil）
+func (c *CSComponents) AuxCounter() *kb.Aux {
+	if c == nil {
+		return nil
+	}
+	return c.Aux
+}
+
 // embAdapter 把 kb.Embedder（批量签名 Embed(ctx, []string)）适配成 answercache 需要的单条签名。
 // 适配器只有一层、不做重试/缓存（embedding 缓存由 kb 侧负责），避免两处口径。
 type embAdapter struct{ e kb.Embedder }
