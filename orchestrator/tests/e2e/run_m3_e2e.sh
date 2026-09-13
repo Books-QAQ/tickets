@@ -8,6 +8,9 @@ unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 export PYTHONIOENCODING=utf-8
 export INTERNAL_KEY="${INTERNAL_KEY:-dev-internal-key}"
 
+# M4：ADMIN_ENABLED=1 时 Go 会拒绝无 token 启动；从 app.env 取（不打印）
+ADMIN_TOKEN=$(grep '^ADMIN_TOKEN=' "app.env" 2>/dev/null | cut -d= -f2- | tr -d '\r"'); export ADMIN_TOKEN
+
 PW=$(grep '^DB_PASSWORD=' app.env | cut -d= -f2- | tr -d '\r"')
 DSN="mysql://root:${PW}@127.0.0.1:3307/tickets"
 GO_LOG=/tmp/m3-go.log
