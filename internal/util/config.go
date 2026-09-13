@@ -63,7 +63,17 @@ type Config struct {
 	ThresholdProse    float64 `mapstructure:"RELEVANCE_THRESHOLD_PROSE"`
 	LiteralThreshold  float64 `mapstructure:"LITERAL_THRESHOLD"`
 	PythonBaseURL     string  `mapstructure:"PYTHON_BASE_URL"`
+	// 工具层（M2）
+	// PENALTY_SEMANTICS_CONFIRMED：19.2 的闸门，**默认 false**。
+	// false 时 refund_fee 不下结论（宁可转人工不猜金额，§8.2）；业务确认语义后再置 1。
+	PenaltySemanticsConfirmed bool `mapstructure:"PENALTY_SEMANTICS_CONFIRMED"`
+	// GUEST_TICKET_ALLOWED：19.3 游客能否建单，默认 false（引导登录）
+	GuestTicketAllowed bool `mapstructure:"GUEST_TICKET_ALLOWED"`
 }
+
+// IsSet 判断某个键是否被显式配置（文件或环境变量）。
+// 用途：布尔开关有"未配置"与"显式关闭"之分，viper 取到的 false 分不清两者。
+func IsSet(key string) bool { return viper.IsSet(key) }
 
 // LoadConfig reads configuration from file or environment variables.
 func LoadConfig(path string) (config Config, err error) {
@@ -82,6 +92,8 @@ func LoadConfig(path string) (config Config, err error) {
 		"RERANK_PROVIDER", "RERANK_BASE_URL", "RERANK_API_KEY", "RERANK_MODEL",
 		"KB_PATH", "RELEVANCE_THRESHOLD_QA", "RELEVANCE_THRESHOLD_PROSE", "LITERAL_THRESHOLD",
 		"PYTHON_BASE_URL",
+		// 工具层（M2）
+		"PENALTY_SEMANTICS_CONFIRMED", "GUEST_TICKET_ALLOWED",
 	} {
 		_ = viper.BindEnv(key)
 	}

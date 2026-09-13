@@ -15,6 +15,7 @@ import (
 	"github.com/Books-QAQ/tickets/internal/ai/classify"
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
 	"github.com/Books-QAQ/tickets/internal/ai/llm"
+	"github.com/Books-QAQ/tickets/internal/ai/tools"
 )
 
 // InternalHandler 跨语言契约（Go 提供，仅内网；§6.1）
@@ -23,11 +24,13 @@ type InternalHandler struct {
 	Retriever *kb.Retriever
 	LLM       llm.Provider
 	Aux       *kb.Aux
+	Tools     *tools.Registry
 	DB        *sql.DB
 }
 
-func NewInternalHandler(store *kb.Store, retriever *kb.Retriever, provider llm.Provider, aux *kb.Aux, db *sql.DB) *InternalHandler {
-	return &InternalHandler{Store: store, Retriever: retriever, LLM: provider, Aux: aux, DB: db}
+func NewInternalHandler(store *kb.Store, retriever *kb.Retriever, provider llm.Provider, aux *kb.Aux,
+	reg *tools.Registry, db *sql.DB) *InternalHandler {
+	return &InternalHandler{Store: store, Retriever: retriever, LLM: provider, Aux: aux, Tools: reg, DB: db}
 }
 
 // errKind 统一错误信封 {error:{kind,message}}（§6.1：编排层据 kind 决策，不解析文案）
@@ -126,32 +129,68 @@ func (h *InternalHandler) Retrieve(c *fiber.Ctx) error {
 
 type routeReq struct {
 	Question    string `json:"question"`
+	Category    string `json:"category"` // 分类（同分破平用；分类器在 Python 侧已跑完）
 	SessionHint string `json:"session_hint"`
 }
 
 // POST /internal/tools/route
-// M1：工具层属 M2，这里恒返回空候选（编排层据 E7 落到检索）。**不是**静默降级——
-// 空候选 + note 明确说明，编排层可把它计入 capacity_absent 之外的观测。
+// M2：按注册表给出候选工具 + **确定性抽好的槽位**（Python 原样回传到执行端）。
+// 多候选不猜（§8.1）：候选按分数排序返回，是否反问由编排层决定。
 func (h *InternalHandler) RouteTool(c *fiber.Ctx) error {
 	var req routeReq
+	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Question) == "" {
+		return errKind(c, fiber.StatusBadRequest, "invalid_input", "question 不能为空")
+	}
+	if h.Tools == nil {
+		return errKind(c, fiber.StatusServiceUnavailable, "tool_layer_unavailable", "工具层未装配")
+	}
+	cands := h.Tools.Route(req.Question, req.Category)
+	h.Aux.Inc("tool_route_calls_total")
+	if len(cands) == 0 {
+		h.Aux.Inc("tool_route_no_candidate_total")
+	}
+	return c.JSON(fiber.Map{"candidates": cands, "session_hint": req.SessionHint})
+}
+
+// execReq 执行请求。注意 **args 就是 route 阶段抽好的槽位原样回传**，
+// user_id / guest_key 由 Go 侧在公网入口从 JWT 解析后中继（§8.5.1：工具入参没有 user_id，
+// 编排层不解析身份、也不产生身份）。
+type execReq struct {
+	Args     tools.SlotSet `json:"args"`
+	UserID   *int32        `json:"user_id"`
+	GuestKey string        `json:"guest_key"`
+	TraceID  string        `json:"trace_id"`
+}
+
+// POST /internal/tools/:name —— 执行工具（Go 执行 / Python 决策，§8）
+func (h *InternalHandler) ExecTool(c *fiber.Ctx) error {
+	name := c.Params("name")
+	if h.Tools == nil {
+		return errKind(c, fiber.StatusServiceUnavailable, "tool_layer_unavailable", "工具层未装配")
+	}
+	var req execReq
 	if err := c.BodyParser(&req); err != nil {
 		return errKind(c, fiber.StatusBadRequest, "invalid_input", "请求体非法")
 	}
-	return c.JSON(fiber.Map{
-		"candidates": []fiber.Map{},
-		"note":       "tool layer not implemented in M1 (see M2)",
-	})
-}
+	// 白名单校验：编排层的 LLM 兜底路由可能给出不存在的工具名（防幻觉，§8.1）
+	if !h.Tools.Has(name) {
+		h.Aux.Inc("tool_unknown_total")
+		return errKind(c, fiber.StatusBadRequest, "unknown_tool",
+			fmt.Sprintf("工具 %s 不在注册表中", name))
+	}
 
-// POST /internal/tools/:name
-// M1：工具未实现 → not_implemented（编排层据此走 E7 检索，而不是当成"工具坏了下游"）。
-func (h *InternalHandler) ExecTool(c *fiber.Ctx) error {
-	name := c.Params("name")
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-		"ok":         false,
-		"error_kind": "not_implemented",
-		"message":    fmt.Sprintf("工具 %s 在 M1 未实现（M2 交付）", name),
-	})
+	// 身份：只认服务端中继进来的 user_id；没有就是游客（个人工具会返回 guest_required）
+	id := tools.Identity{Guest: true, GuestKey: req.GuestKey}
+	if req.UserID != nil && *req.UserID > 0 {
+		id = tools.Identity{UserID: *req.UserID}
+	}
+
+	// ⚠️ 用 WithoutCancel 派生：fasthttp 的 RequestCtx 在 handler 返回后被回收，
+	// 若直接把它当父 ctx，超时 goroutine 会拿到一个已取消/被复用的 ctx
+	// （M1 的流式写入就踩过这个坑）。这里由工具层自己的超时负责取消。
+	ctx := context.WithoutCancel(c.Context())
+	res := h.Tools.RunNamed(ctx, name, id, req.Args)
+	return c.JSON(res)
 }
 
 type verifyReq struct {

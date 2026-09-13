@@ -49,7 +49,7 @@ func SetupRoutes(server *api.Server) error {
 	// 若放在 authGroup（prefix "/" + JWT 校验）之后，/internal/* 会先被 JWT 中间件拦成 401。
 	// 组件装配失败（server.CS == nil）时不注册，避免半残状态被调用。
 	if server.CS != nil && server.CS.KB != nil {
-		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.KB.DB)
+		ih := handlers.NewInternalHandler(server.CS.KB, server.CS.Retriever, server.CS.LLM, server.CS.Aux, server.CS.Tools, server.CS.KB.DB)
 		internal := server.App.Group("/internal", middleware.InternalKeyMiddleware(server.Config.InternalKey))
 		internal.Post("/classify/pre-intent", ih.PreIntent)
 		internal.Post("/classify/rule", ih.ClassifyRule)
@@ -74,5 +74,8 @@ func SetupRoutes(server *api.Server) error {
 	authGroup.Post("/orders/:orderNo/pay", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).PayOrder)
 	authGroup.Get("/orders/:orderNo/status", handlers.NewOrderHandler(server.Store, server.Redis, server.TokenMaker, server.Config, server.MQ, server.PaymentProviders...).GetOrderStatus)
 	authGroup.Delete("/tickets/:id", handlers.NewTicketHandler(server.Store, server.Redis, server.TokenMaker, server.Config).CancelTicket)
+
+	// 智能AI客服：用户查自己的工单（§10.4 V1 范围；user_id 只来自服务端 JWT 解析）
+	authGroup.Get("/cs/support-tickets", handlers.NewCSHandler(server.Store).ListSupportTickets)
 	return nil
 }

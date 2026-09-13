@@ -9,16 +9,21 @@ import (
 
 	"github.com/Books-QAQ/tickets/internal/ai/kb"
 	"github.com/Books-QAQ/tickets/internal/ai/llm"
+	"github.com/Books-QAQ/tickets/internal/ai/tools"
 	"github.com/Books-QAQ/tickets/internal/util"
+
+	db "github.com/Books-QAQ/tickets/internal/db/sqlc"
 )
 
-// CSComponents 智能AI客服的 Go 侧能力组件（M1：检索 + 分类 + 引用校验 + LLM 网关）
+// CSComponents 智能AI客服的 Go 侧能力组件
+// （M1：检索 + 分类 + 引用校验 + LLM 网关；M2：工具层）
 type CSComponents struct {
 	KB          *kb.Store
 	Retriever   *kb.Retriever
 	LLM         llm.Provider
 	Aux         *kb.Aux
 	Index       *kb.Index
+	Tools       *tools.Registry
 	LLMDegraded bool // true = 走的是 mock provider（degraded.llm）
 }
 
@@ -119,5 +124,28 @@ func BuildCSComponents(dbConn *sql.DB, cfg util.Config) (*CSComponents, error) {
 		},
 	}
 
-	return &CSComponents{KB: store, Retriever: retriever, LLM: provider, Aux: aux, Index: index, LLMDegraded: llmDegraded}, nil
+	// —— 工具层（M2）——
+	// 工具注册表：读工具复用同一个 aux 计数点（Go 侧单一计数来源，§5.10）
+	toolCfg := tools.DefaultConfig()
+	toolCfg.PenaltySemanticsConfirmed = cfg.PenaltySemanticsConfirmed
+	if util.IsSet("GUEST_TICKET_ALLOWED") {
+		// 只有显式配置才覆盖默认值：19.3 未拍板时保持 M1 已验收行为（游客可建单）
+		toolCfg.GuestTicketAllowed = cfg.GuestTicketAllowed
+	}
+	if !util.IsSet("GUEST_TICKET_ALLOWED") {
+		log.Warn().Msg("19.3 未拍板：游客建单沿用默认（允许）。要改为引导登录，请设 GUEST_TICKET_ALLOWED=0")
+	}
+	dbStore := db.NewStore(dbConn)
+	toolRegistry := tools.BuildRegistry(tools.Deps{
+		Store:    dbStore,
+		Cfg:      toolCfg,
+		Cnt:      aux,
+		Stations: tools.NewStationProvider(dbStore),
+	})
+	if !toolCfg.PenaltySemanticsConfirmed {
+		log.Warn().Msg("退票费工具闸门未开启（19.2 penalties 语义未确认）→ refund_fee 不下结论，走 FAQ + 转人工")
+	}
+
+	return &CSComponents{KB: store, Retriever: retriever, LLM: provider, Aux: aux, Index: index,
+		Tools: toolRegistry, LLMDegraded: llmDegraded}, nil
 }
