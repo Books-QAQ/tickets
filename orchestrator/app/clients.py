@@ -83,8 +83,9 @@ class CapabilityClient:
             "scope_ref": scope_ref,
         }, self.settings.timeout_retrieve_s)
 
-    async def tools_route(self, question: str, session_hint: str = "") -> dict:
-        return await self._post("/internal/tools/route", {"question": question, "session_hint": session_hint},
+    async def tools_route(self, question: str, category: str = "", session_hint: str = "") -> dict:
+        return await self._post("/internal/tools/route",
+                                {"question": question, "category": category, "session_hint": session_hint},
                                 self.settings.timeout_classify_s)
 
     async def exec_tool(self, name: str, *, args: dict, user_id: int | None, guest_key: str | None,
@@ -162,6 +163,18 @@ class GatewayLLM:
             http_async_client=httpx.AsyncClient(trust_env=False, timeout=settings.timeout_llm_s),
         )
         self.name = f"gateway:{settings.llm_model}"
+
+    async def complete(self, system: str, user: str) -> str:
+        """非流式一次调用：用于"只决定调哪个工具"这类短输出决策。
+
+        与 stream 分开的理由：决策类调用不需要 SSE，也不需要 delta 事件
+        （§5.10.3 的流事件只服务用户可见的生成过程）。
+        """
+        msg = await self._model.ainvoke([("system", system), ("user", user)])
+        text = msg.content
+        if isinstance(text, list):  # 部分供应商返回分段内容
+            text = "".join(part.get("text", "") for part in text if isinstance(part, dict))
+        return text or ""
 
     async def stream(self, system: str, user: str) -> AsyncIterator[tuple[str, Any]]:
         messages = [("system", system), ("user", user)]

@@ -173,6 +173,10 @@ def _final_payload(result: dict, conv_id: str, trace_id: str) -> dict:
         "boundary_violation": bool(result.get("boundary_violation")),
         "degraded": result.get("degraded") or {},
         "vector_mode": result.get("vector_mode"),
+        # M2：工具层可观测（验收与排障要看"走的是工具还是检索、工具判定是什么"）
+        "tool_name": result.get("tool_name"),
+        "tool_kind": result.get("tool_kind"),
+        "tool_reason": (result.get("tool_result") or {}).get("reason"),
         "stage_ms": result.get("stage_ms") or {},
         "tokens": result.get("tokens") or {},
     }

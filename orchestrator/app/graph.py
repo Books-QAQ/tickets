@@ -38,16 +38,20 @@ def edge_after_classify(state: CSState) -> Literal["route_tool", "llm_arbitrate"
     return "llm_arbitrate"  # E4
 
 
-def edge_after_route_tool(state: CSState) -> Literal["exec_tool", "retrieve"]:
+def edge_after_route_tool(state: CSState) -> Literal["exec_tool", "clarify", "retrieve"]:
     if state.get("tool_name"):
         return "exec_tool"  # E5/E6
+    if state.get("clarify_options"):
+        return "clarify"  # E8（M2 单轮版；interrupt 版属 M3）
     return "retrieve"  # E7
 
 
-def edge_after_exec_tool(state: CSState) -> Literal["retrieve", "transfer"]:
+def edge_after_exec_tool(state: CSState) -> Literal["tool_answer", "retrieve", "transfer"]:
     if state.get("transfer"):
-        return "transfer"  # 工具不可用 → 转人工（并单独计数）
-    return "retrieve"  # E10（M1 里工具未实现也走这里）
+        return "transfer"  # 业务规则不允许/契约失败 → 转人工（路径由 path_hint 定）
+    if state.get("tool_direct_answer"):
+        return "tool_answer"  # E9：事实类且自足 → 确定性直答
+    return "retrieve"  # E10：工具不可用/需与知识库融合 → 回落检索
 
 
 def edge_after_retrieve(state: CSState) -> Literal["transfer", "generate"]:
@@ -67,6 +71,10 @@ def edge_after_generate(state: CSState) -> Literal["transfer", "verify"]:
 def edge_after_verify(state: CSState) -> Literal["transfer", "finalize"]:
     if not state.get("verify_valid"):
         return "transfer"  # E15
+    # §8.2：工具闸门关闭/数据缺失时是"**走知识库 FAQ + 转人工**"——
+    # 既要把规则讲清楚（FAQ 已答出来），也要建单让人工核金额（不能只答不转）。
+    if state.get("tool_path_hint") == "transfer_tool_unavailable":
+        return "transfer"
     return "finalize"  # E16
 
 
@@ -95,6 +103,12 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
     async def exec_tool(state: CSState) -> dict:
         return await N.exec_tool(state, deps)
 
+    async def tool_answer(state: CSState) -> dict:
+        return await N.tool_answer(state, deps)
+
+    async def clarify(state: CSState) -> dict:
+        return await N.clarify(state, deps)
+
     async def retrieve(state: CSState) -> dict:
         return await N.retrieve(state, deps)
 
@@ -118,6 +132,8 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
         ("llm_arbitrate", llm_arbitrate),
         ("route_tool", route_tool),
         ("exec_tool", exec_tool),
+        ("tool_answer", tool_answer),
+        ("clarify", clarify),
         ("retrieve", retrieve),
         ("generate", generate),
         ("verify", verify),
@@ -133,12 +149,14 @@ def build_graph(deps: N.Deps, checkpointer: Any = None):
     builder.add_conditional_edges("classify_rule", edge_after_classify,
                                   ["route_tool", "llm_arbitrate"])
     builder.add_edge("llm_arbitrate", "route_tool")
-    builder.add_conditional_edges("route_tool", edge_after_route_tool, ["exec_tool", "retrieve"])
-    builder.add_conditional_edges("exec_tool", edge_after_exec_tool, ["retrieve", "transfer"])
+    builder.add_conditional_edges("route_tool", edge_after_route_tool, ["exec_tool", "clarify", "retrieve"])
+    builder.add_conditional_edges("exec_tool", edge_after_exec_tool, ["tool_answer", "retrieve", "transfer"])
     builder.add_conditional_edges("retrieve", edge_after_retrieve, ["transfer", "generate"])
     builder.add_conditional_edges("generate", edge_after_generate, ["transfer", "verify"])
     builder.add_conditional_edges("verify", edge_after_verify, ["transfer", "finalize"])
     builder.add_edge("greet", "finalize")
+    builder.add_edge("tool_answer", "finalize")
+    builder.add_edge("clarify", "finalize")
     builder.add_edge("transfer", "finalize")
     builder.add_edge("finalize", END)
 

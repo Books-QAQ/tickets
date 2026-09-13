@@ -58,7 +58,13 @@ class CSState(TypedDict, total=False):
     # —— 供给 ——
     tool_name: str | None
     tool_args: dict
+    tool_slots: dict  # Go 抽好的槽位（原样回传，避免两层各抽一遍）
     tool_result: dict | None
+    tool_kind: str  # ok|empty|slots_incomplete|guest_required|not_found|unavailable|blocked
+    tool_path_hint: str  # transfer_tool_unavailable | transfer_deterministic | transfer_capability_absent
+    tools_available: list  # 工具清单（E6 的 LLM 兜底路由只能从这里选，白名单）
+    clarify_options: list  # 多候选/歧义选项（E8；M2 单轮反问版）
+    order_no: str  # 从槽位带出的订单号（工单摘要用）
     chunks: list[dict]
     source_labels: list[str]
     top1_cos: float

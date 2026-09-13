@@ -22,6 +22,19 @@ SYSTEM_PROMPT = """你是铁路客运票务平台的官方客服助手。只依�
 如果无法在给定材料中找到依据，只输出：[TRANSFER]"""
 
 
+# —— M2：工具选择的 LLM 兜底（E6）——
+# 只解决"提槽未命中、但确实该调某个工具"的情形。
+# **LLM 只决定调哪个**，参数槽位仍由 Go 的确定性抽取填充，且选出后必须过白名单校验（§8.1）。
+TOOL_PICK_SYSTEM = """你是工具选择器。给定用户的客服问题和可用工具清单，选出**一个**最合适的工具名。
+只输出工具名本身，不要解释、不要标点。若没有任何工具适用，只输出 NONE。
+安全约束：只能从清单里选，不许发明工具名。"""
+
+
+def build_tool_pick_prompt(question: str, tools: list[dict]) -> str:
+    lines = [f"- {t.get('name')}（{t.get('kind')}）：{t.get('desc')}" for t in tools]
+    return "可用工具：\n" + "\n".join(lines) + f"\n\n用户问题：{question}\n\n工具名："
+
+
 def build_context_block(chunks: list[dict]) -> str:
     """把检索结果按 capability 分成两个物理区块（§5.9 ③）。"""
     native: list[str] = []
