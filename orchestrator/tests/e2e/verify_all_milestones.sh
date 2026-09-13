@@ -26,19 +26,19 @@ docker exec tickets-mysql-1 mysql -uroot -p"$PW" tickets -e \
   "SET time_zone='+08:00'; UPDATE orders SET status='pending', expired_at=DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE order_no LIKE '22222222%';" 2>&1 | grep -v Warning
 
 echo "########## 3. M1 回归（20 条）##########"
-env -u PYTHONPATH -u PYTHONHOME uv run python $(dirname "$0")/acceptance.py > /tmp/final_m1.txt 2>&1
+env -u PYTHONPATH -u PYTHONHOME uv run python "$(cd "$(dirname "$0")" && pwd -W)"/acceptance.py > /tmp/final_m1.txt 2>&1
 m1=$?
 echo "M1_acceptance_exit=$m1"
 grep -E "作答数|覆盖率|违规|FAIL" /tmp/final_m1.txt | head -6
 
 echo "########## 4. M2 回归（22 项）##########"
-USER_A=5 USER_B=6 env -u PYTHONPATH -u PYTHONHOME uv run python $(dirname "$0")/acceptance_m2.py > /tmp/final_m2.txt 2>&1
+USER_A=5 USER_B=6 env -u PYTHONPATH -u PYTHONHOME uv run python "$(cd "$(dirname "$0")" && pwd -W)"/acceptance_m2.py > /tmp/final_m2.txt 2>&1
 m2=$?
 echo "M2_acceptance_exit=$m2"
 grep -E "合计|FAIL" /tmp/final_m2.txt | head -5
 
 echo "########## 5. M3 全量（阶段一 + 重启后续跑）##########"
-bash "$(dirname "$0")/run_m3_e2e.sh" > /tmp/final_m3.txt 2>&1
+bash "$(cd "$(dirname "$0")" && pwd -W)"/run_m3_e2e.sh > /tmp/final_m3.txt 2>&1
 echo "M3_driver_exit=$?"
 grep -E "M3 验收汇总|M3_e2e_exit|phase1=|phase2=|FAIL" /tmp/final_m3.txt | head -8
 

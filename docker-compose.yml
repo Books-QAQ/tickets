@@ -8,7 +8,8 @@ services:
     environment:
       - DB_CONNECTION=mysql
       - DB_USERNAME=root
-      - DB_PASSWORD=020218
+      # 口令一律从 .env 取（**别再写死在 compose 里**：compose 是入库文件，写死 = 口令进 git）
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD 必须配置（放 .env，勿入库）}
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_DATABASE=tickets
@@ -17,28 +18,86 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://guest:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      - TOKEN_SECRET_KEY=${TOKEN_SECRET_KEY:?TOKEN_SECRET_KEY 必须配置}
+      # —— 智能AI客服（M1~M4）——
+      - PYTHON_BASE_URL=http://orchestrator:8001   # Go → 编排层（唯一公网入口仍是 app）
+      - INTERNAL_KEY=${INTERNAL_KEY:?INTERNAL_KEY 必须配置}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION=kb_chunks
+      - KB_PATH=./kb
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-}
+      - PENALTY_SEMANTICS_CONFIRMED=${PENALTY_SEMANTICS_CONFIRMED:-0}
+      - GUEST_TICKET_ALLOWED=${GUEST_TICKET_ALLOWED:-1}
+      # 运维面：ADMIN_ENABLED=1 时必须有 ADMIN_TOKEN，否则服务**拒绝启动**
+      - ADMIN_ENABLED=${ADMIN_ENABLED:-0}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      - CS_RATE_LIMIT_WINDOW=${CS_RATE_LIMIT_WINDOW:-1m}
+      - CS_RATE_LIMIT_MAX_IP=${CS_RATE_LIMIT_MAX_IP:-30}
+      - CS_RATE_LIMIT_MAX_USER=${CS_RATE_LIMIT_MAX_USER:-20}
     depends_on:
       - mysql
       - redis
       - rabbitmq
     restart: always
     command: [ "/app/main" ]
+
+  # 编排层（Python + LangGraph）：**只在内网**，不映射端口（§16.1）
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    environment:
+      - GO_BASE_URL=http://app:8080
+      - INTERNAL_KEY=${INTERNAL_KEY:?INTERNAL_KEY 必须配置}
+      - CHECKPOINT_DSN=mysql://root:${DB_PASSWORD}@mysql:3306/tickets
+      - CHECKPOINT_RETENTION_DAYS=${CHECKPOINT_RETENTION_DAYS:-7}
+      - CHECKPOINT_CLEANUP_INTERVAL_S=${CHECKPOINT_CLEANUP_INTERVAL_S:-3600}
+      - LLM_MODEL=${LLM_MODEL:-mock}
+      - MEMORY_RECENT_N=${MEMORY_RECENT_N:-5}
+      - MEMORY_SUMMARY_MAX=${MEMORY_SUMMARY_MAX:-10}
+    depends_on:
+      - app
+      - mysql
+    restart: always
+    # 不写 ports —— 编排层不暴露到宿主机
+
   mysql:
     image: mysql:8.4
     environment:
-      - MYSQL_ROOT_PASSWORD=020218
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:?DB_PASSWORD 必须配置（放 .env，勿入库）}
       - MYSQL_DATABASE=tickets
     ports:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
+  # 向量库：同样不映射宿主机端口（平台层与编排层都走容器内网）
+  qdrant:
+    # 版本按 M0 spike 固定；**勿用 latest 上生产**
+    image: qdrant/qdrant:v1.19.1
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: always
+    # 不写 ports
+
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -46,7 +105,9 @@ services:
       - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+
 volumes:
   mysql_data:
   redis_data:
+  qdrant_data:

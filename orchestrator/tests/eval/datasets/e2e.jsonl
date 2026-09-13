@@ -1,0 +1,20 @@
+{"q":"支持哪些支付方式","expect_category":"order","expect_label":"order-pay-method","key_facts":["支付"],"capability":"supported","note":"平台能力类：须与真实能力一致"}
+{"q":"支付失败怎么办","expect_category":"order","expect_label":"order-pay-issue","key_facts":["支付"],"capability":"supported","note":"平台能力类"}
+{"q":"怎么开发票","expect_category":"order","expect_label":"order-invoice","key_facts":["发票"],"capability":"supported","note":"平台能力类"}
+{"q":"订单多久会自动关闭","expect_category":"order","expect_label":"order-query","key_facts":["订单"],"capability":"supported","note":"平台能力类"}
+{"q":"页面打不开怎么办","expect_category":"app","expect_label":"app-page-error","key_facts":["页面"],"capability":"supported","note":"平台能力类"}
+{"q":"投诉电话是多少","expect_category":"policy","expect_label":"policy-complaint","key_facts":["投诉"],"capability":"supported","note":"信息类提问（须走检索不转人工）"}
+{"q":"退票手续费怎么算","expect_category":"refund","expect_label":"refund-fee","key_facts":["退票"],"capability":"supported","note":"行业知识类（费率规则）"}
+{"q":"退款多久到账","expect_category":"refund","expect_label":"refund-arrival","key_facts":["退款"],"capability":"supported","note":"行业知识类"}
+{"q":"可以撤销退票吗","expect_category":"refund","expect_label":"refund-cancel-policy","key_facts":["退票"],"capability":"industry","note":"行业知识类：须带边界声明"}
+{"q":"登录不上怎么办","expect_category":"account","expect_label":"account-auth","key_facts":["登录"],"capability":"supported","note":"平台能力类"}
+{"q":"候补购票怎么用","expect_category":"booking","expect_label":"booking-waitlist","key_facts":["候补"],"capability":"industry","note":"roadmap 能力：必须带边界声明，不得讲成平台能力"}
+{"q":"北京西站检票要提前多久","expect_category":"travel","expect_label":"station-beijingxi-rules","key_facts":["检票"],"capability":"industry","note":"站点实例化知识：须带边界声明"}
+{"q":"北京西站怎么走","expect_category":"travel","expect_label":"station-beijingxi-rules","key_facts":["北京西站"],"capability":"industry","note":"站点实例化知识"}
+{"q":"可以带多少行李","expect_category":"travel","expect_label":"station-beijingxi-rules","key_facts":["行李"],"capability":"industry","note":"行业知识类（行李规则）"}
+{"q":"儿童票怎么买","expect_category":"booking","expect_label":"station-beijingxi-rules","key_facts":["儿童"],"capability":"industry","note":"行业知识类（票种）"}
+{"q":"我要投诉你们","expect_category":"policy","expect_label":"","key_facts":["人工"],"capability":"transfer","note":"确定性转人工（须给工单号）"}
+{"q":"你们老板是谁","expect_category":"other","expect_label":"","key_facts":["业务范围"],"capability":"transfer","note":"越界问题 → 转人工/拒答"}
+{"q":"我的车票","expect_category":"order","expect_label":"","key_facts":["登录"],"capability":"transfer","guest":true,"note":"游客调个人工具 → 引导登录（越权矩阵）"}
+{"q":"嗯","expect_category":"other","expect_label":"","key_facts":["智能客服"],"capability":"greet","note":"无效输入/问候：须友好回应"}
+{"q":"退票手续费怎么算 订单号 11111111-1111-1111-1111-111111111111","expect_category":"refund","expect_label":"","key_facts":["退票"],"capability":"tool","user_id":5,"note":"带订单号 → 走工具（闸门关闭时 = FAQ + 转人工）"}

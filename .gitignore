@@ -10,3 +10,6 @@ orchestrator/spike/_m0a_probe.log
 
 # M3 验收脚本的临时状态（含测试 JWT）
 orchestrator/tests/e2e/.m3_state.json
+app.env
+*.env
+!*.env.example

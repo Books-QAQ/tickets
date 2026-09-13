@@ -61,7 +61,7 @@ echo "  已清空 cs:ac:*"
 
 echo "== 4. phase 1（多轮指代 / 缓存 / 流式 / 断开 / 触发反问）=="
 cd /d/golangproject/tickets/orchestrator || exit 1
-env -u PYTHONPATH -u PYTHONHOME uv run python $(dirname "$0")/acceptance_m3.py --phase 1 2>&1 | tail -32
+env -u PYTHONPATH -u PYTHONHOME uv run python "$(cd "$(dirname "$0")" && pwd -W)"/acceptance_m3.py --phase 1 2>&1 | tail -32
 p1=${PIPESTATUS[0]}
 echo "phase1 exit=$p1"
 
@@ -72,7 +72,7 @@ start_orch
 
 echo "== 6. phase 2（用同一 conv_id resume）=="
 cd /d/golangproject/tickets/orchestrator || exit 1
-env -u PYTHONPATH -u PYTHONHOME uv run python $(dirname "$0")/acceptance_m3.py --phase 2 2>&1 | tail -16
+env -u PYTHONPATH -u PYTHONHOME uv run python "$(cd "$(dirname "$0")" && pwd -W)"/acceptance_m3.py --phase 2 2>&1 | tail -16
 p2=${PIPESTATUS[0]}
 echo "phase2 exit=$p2"
 

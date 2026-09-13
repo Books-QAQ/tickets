@@ -1,0 +1,30 @@
+{"q":"支持哪些支付方式","expect_label":"order-pay-method","form":"qa","note":"FAQ 标准问"}
+{"q":"能用信用卡付吗","expect_label":"order-pay-method","form":"qa","note":"改写问法"}
+{"q":"支付失败怎么办","expect_label":"order-pay-issue","form":"qa","note":"FAQ"}
+{"q":"扣款了但是订单还在待支付","expect_label":"order-pay-issue","form":"qa","note":"改写"}
+{"q":"怎么开发票","expect_label":"order-invoice","form":"qa","note":"FAQ"}
+{"q":"电子发票可以吗","expect_label":"order-invoice","form":"qa","note":"改写"}
+{"q":"我的订单在哪里查","expect_label":"order-query","form":"qa","note":"FAQ"}
+{"q":"订单多久会自动关闭","expect_label":"order-query","form":"qa","note":"关心单"}
+{"q":"页面打不开","expect_label":"app-page-error","form":"qa","note":"FAQ"}
+{"q":"APP一直转圈","expect_label":"app-page-error","form":"qa","note":"改写"}
+{"q":"投诉电话是多少","expect_label":"policy-complaint","form":"qa","note":"FAQ"}
+{"q":"怎么提意见","expect_label":"policy-complaint","form":"qa","note":"改写"}
+{"q":"候补购票怎么用","expect_label":"booking-waitlist","form":"qa","note":"roadmap 能力（须带边界声明）"}
+{"q":"退票手续费怎么算","expect_label":"refund-fee","form":"qa","note":"FAQ"}
+{"q":"发车前多久能退","expect_label":"refund-fee","form":"qa","note":"改写"}
+{"q":"退款多久到账","expect_label":"refund-arrival","form":"qa","note":"FAQ"}
+{"q":"钱什么时候退回来","expect_label":"refund-arrival","form":"qa","note":"语义改写（字面不重叠）"}
+{"q":"可以撤销退票吗","expect_label":"refund-cancel-policy","form":"qa","note":"FAQ"}
+{"q":"登录不上","expect_label":"account-auth","form":"qa","note":"FAQ"}
+{"q":"收不到验证码","expect_label":"account-auth","form":"qa","note":"改写"}
+{"q":"北京西站检票要提前多久","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 形态（站点规则）"}
+{"q":"北京西站怎么走","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 改写"}
+{"q":"北京西站有哪些特殊规定","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 泛问"}
+{"q":"在大站上车有什么要注意的","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 语义接近"}
+{"q":"车站实名制验票规则","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 术语"}
+{"q":"进站要过安检吗","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 细节"}
+{"q":"候车厅在哪里","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 设施"}
+{"q":"车站广播听不清怎么办","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 长尾"}
+{"q":"提前多久停止检票","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 关键事实"}
+{"q":"北京西站有寄存处吗","expect_label":"station-beijingxi-rules","form":"prose","note":"prose 设施"}
