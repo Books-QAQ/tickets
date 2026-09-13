@@ -67,18 +67,19 @@ func main() {
 
 	store := db.NewStore(dbConn)
 
-	// 智能AI客服组件（M1）：任一依赖不可用时**降级**而不是启动失败（降级在响应里可见）
-	csComponents, err := api.BuildCSComponents(dbConn, config)
-	if err != nil {
-		log.Error().Err(err).Msg("cannot build AI customer-service components; /internal/* disabled")
-		csComponents = nil
-	}
-
+	// 智能AI客服组件（M1/M2/M3）：任一依赖不可用时**降级**而不是启动失败（降级在响应里可见）
+	// 注意顺序：M3 的答案缓存要复用同一个 Redis 客户端，所以 redis 先建
 	redisClient, err := cache.NewRedisClient(config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot connect to redis")
 	}
 	defer redisClient.Close()
+
+	csComponents, err := api.BuildCSComponents(dbConn, redisClient, config)
+	if err != nil {
+		log.Error().Err(err).Msg("cannot build AI customer-service components; /internal/* disabled")
+		csComponents = nil
+	}
 
 	// 连接 RabbitMQ（DLX+TTL 延迟队列），失败则降级为 nil，靠兜底扫描关单
 	var mq *queue.RabbitMQ
